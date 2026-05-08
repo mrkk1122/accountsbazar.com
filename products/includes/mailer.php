@@ -45,10 +45,12 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
         return false;
     }
     $missingCredentials = array();
-    if (trim((string) MAIL_SMTP_USERNAME) === '') {
+    $smtpUsername = MAIL_SMTP_USERNAME;
+    $smtpPassword = MAIL_SMTP_PASSWORD;
+    if (!is_string($smtpUsername) || trim($smtpUsername) === '') {
         $missingCredentials[] = 'MAIL_SMTP_USERNAME';
     }
-    if (trim((string) MAIL_SMTP_PASSWORD) === '') {
+    if (!is_string($smtpPassword) || trim($smtpPassword) === '') {
         $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
     }
     if (!empty($missingCredentials)) {
