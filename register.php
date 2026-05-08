@@ -62,20 +62,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     $ins->close();
                     $db->closeConnection();
 
-                    // ---- Send welcome email ----
-                    $siteName = 'Accounts Bazar';
-                    $toName   = $fullName;
-                    $subject  = "Welcome to $siteName – Registration Successful!";
-                    $body = "Dear $toName,\n\n";
-                    $body .= "Congratulations! Your account has been successfully created on $siteName.\n\n";
-                    $body .= "Your login details:\n";
-                    $body .= "  Email    : $email\n\n";
-                    $body .= "You can now log in and start shopping:\n";
-                    $body .= "  http://" . ($_SERVER['HTTP_HOST'] ?? 'localhost') . "/dashboard/acounntsbazar/login.php\n\n";
-                    $body .= "Thank you for joining us!\n";
-                    $body .= "$siteName Team";
-
-                    smtpSendMail($email, $subject, $body);
+                    // Send welcome email using new notification system
+                    sendRegistrationEmail($email, $fullName, $username);
 
                     $success = 'Registration successful! A confirmation email has been sent to <strong>' . htmlspecialchars($email) . '</strong>. <a href="login.php">Login now →</a>';
                 } else {

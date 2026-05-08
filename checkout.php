@@ -36,6 +36,7 @@ session_start();
 require_once 'products/config/config.php';
 require_once 'products/includes/db.php';
 require_once 'products/includes/mailer.php';
+require_once 'products/includes/notifications.php';
 
 if (empty($_SESSION['user_id'])) {
     if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
@@ -120,21 +121,68 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 
         $db->closeConnection();
 
-        // ---- Send confirmation email to customer ----
-        $customerEmail = $address; // address field holds email value
-        if (filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-            $mailSubject = "Order Confirmed: $orderNum | Accounts Bazar";
-            $mailBody    = "Dear $fullName,\r\n\r\n";
-            $mailBody   .= "Thank you for your order! Here are your order details:\r\n\r\n";
-            $mailBody   .= "Order Number : $orderNum\r\n";
-            $mailBody   .= "Product      : {$prod['name']}\r\n";
-            $mailBody   .= "Plan         : {$allowedPlans[$plan]}\r\n";
-            $mailBody   .= "Amount       : BDT " . number_format($price, 2) . "\r\n";
-            $mailBody   .= "Payment      : $payMethod\r\n";
-            $mailBody   .= "TrxID        : $trxId\r\n\r\n";
-            $mailBody   .= "We will verify your payment and process your order shortly.\r\n\r\n";
-            $mailBody   .= "Thanks,\r\nAccounts Bazar Team";
-            smtpSendMail($customerEmail, $mailSubject, $mailBody);
+        // ---- Get user email for notifications ----
+        $db   = new Database();
+        $conn = $db->getConnection();
+        $userStmt = $conn->prepare('SELECT email, first_name FROM users WHERE id = ? LIMIT 1');
+        $userStmt->bind_param('i', $userId);
+        $userStmt->execute();
+        $userResult = $userStmt->get_result();
+        $userStmt->close();
+        
+        $userEmail = '';
+        $userName = $fullName;
+        if ($userResult && $userResult->num_rows > 0) {
+            $userData = $userResult->fetch_assoc();
+            $userEmail = (string) ($userData['email'] ?? '');
+            $userName = (string) ($userData['first_name'] ?? $fullName);
+        }
+        $db->closeConnection();
+
+        // ---- Send notifications through notification manager ----
+        try {
+            $notificationManager = new NotificationManager();
+            
+            // Prepare order details for email
+            $orderDetails = array('amount' => 'BDT ' . number_format($price, 2));
+            
+            // Create in-app notification and queue email
+            if (!empty($userEmail)) {
+                $emailBody = sendOrderConfirmationEmail($userEmail, $userName, $orderNum, $orderDetails);
+                
+                $notificationManager->sendNotification(
+                    $userId,
+                    'order',
+                    'Order Confirmed',
+                    "Your order $orderNum has been received. Amount: BDT " . number_format($price, 2),
+                    $orderNum,
+                    array(
+                        'email' => $userEmail,
+                        'subject' => "Order Confirmed: $orderNum | Accounts Bazar",
+                        'body' => $emailBody
+                    )
+                );
+            } else {
+                // Fallback to direct email if notification manager fails
+                $mailSubject = "Order Confirmed: $orderNum | Accounts Bazar";
+                $mailBody    = "Dear $fullName,\r\n\r\n";
+                $mailBody   .= "Thank you for your order! Here are your order details:\r\n\r\n";
+                $mailBody   .= "Order Number : $orderNum\r\n";
+                $mailBody   .= "Product      : {$prod['name']}\r\n";
+                $mailBody   .= "Plan         : {$allowedPlans[$plan]}\r\n";
+                $mailBody   .= "Amount       : BDT " . number_format($price, 2) . "\r\n";
+                $mailBody   .= "Payment      : $payMethod\r\n";
+                $mailBody   .= "TrxID        : $trxId\r\n\r\n";
+                $mailBody   .= "We will verify your payment and process your order shortly.\r\n\r\n";
+                $mailBody   .= "Thanks,\r\nAccounts Bazar Team";
+                
+                if (!empty($userEmail)) {
+                    smtpSendMail($userEmail, $mailSubject, $mailBody);
+                }
+            }
+        } catch (Exception $e) {
+            // Log error but don't fail the order
+            logMailActivity('', "Order $orderNum", 'ERROR', $e->getMessage());
         }
 
         echo json_encode(['success' => true, 'order_number' => $orderNum]);

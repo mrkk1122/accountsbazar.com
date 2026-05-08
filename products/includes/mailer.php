@@ -1,6 +1,8 @@
 <?php
 require_once __DIR__ . '/../config/mail.php';
 
+// ==================== CORE SMTP FUNCTIONS ====================
+
 function smtpReadResponse($socket) {
     $response = '';
     while (!feof($socket)) {
@@ -39,70 +41,313 @@ function smtpNormalizeBody($body) {
     return str_replace("\n", "\r\n", $body);
 }
 
-function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
+/**
+ * Log mail activity for debugging and tracking
+ */
+function logMailActivity($recipient, $subject, $status, $error = '') {
+    if (!MAIL_LOG_ENABLED) {
+        return;
+    }
+    
+    $logDir = __DIR__ . '/../../mail-logs';
+    if (!is_dir($logDir)) {
+        @mkdir($logDir, 0755, true);
+    }
+    
+    $logFile = $logDir . '/mail-' . date('Y-m-d') . '.log';
+    $timestamp = date('Y-m-d H:i:s');
+    $logEntry = "[$timestamp] TO: $recipient | STATUS: $status | SUBJECT: $subject";
+    if ($error) {
+        $logEntry .= " | ERROR: $error";
+    }
+    $logEntry .= "\n";
+    
+    @file_put_contents($logFile, $logEntry, FILE_APPEND | LOCK_EX);
+}
+
+/**
+ * Core SMTP Mail Sending Function with retry logic
+ */
+function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username = MAIL_SMTP_USERNAME, $password = MAIL_SMTP_PASSWORD) {
     $to = trim((string) $to);
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        $error = "Invalid email: $to";
+        logMailActivity($to, $subject, 'FAILED', $error);
         return false;
     }
 
-    $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
-    $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
-    $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT);
-    if (!$socket) {
-        return false;
-    }
+    $attempts = 0;
+    $maxAttempts = MAIL_RETRY_ATTEMPTS;
 
-    stream_set_timeout($socket, 30);
-
-    if (!smtpExpectCode($socket, array(220))) {
-        fclose($socket);
-        return false;
-    }
-
-    $hostName = preg_replace('/[^a-zA-Z0-9.-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
-    if ($hostName === '') {
-        $hostName = 'localhost';
-    }
-
-    if (!smtpSendCommand($socket, 'EHLO ' . $hostName, array(250))) {
-        if (!smtpSendCommand($socket, 'HELO ' . $hostName, array(250))) {
-            fclose($socket);
-            return false;
+    while ($attempts < $maxAttempts) {
+        $attempts++;
+        
+        $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
+        $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
+        $socket = @stream_socket_client($remoteSocket, $errno, $errstr, MAIL_SEND_TIMEOUT, STREAM_CLIENT_CONNECT);
+        
+        if (!$socket) {
+            if ($attempts >= $maxAttempts) {
+                $error = "Connection failed (attempt $attempts/$maxAttempts): $errstr";
+                logMailActivity($to, $subject, 'FAILED', $error);
+                return false;
+            }
+            sleep(1); // Wait before retry
+            continue;
         }
-    }
 
-    if (!smtpSendCommand($socket, 'AUTH LOGIN', array(334))
-        || !smtpSendCommand($socket, base64_encode(MAIL_SMTP_USERNAME), array(334))
-        || !smtpSendCommand($socket, base64_encode(MAIL_SMTP_PASSWORD), array(235))) {
+        stream_set_timeout($socket, MAIL_SEND_TIMEOUT);
+
+        if (!smtpExpectCode($socket, array(220))) {
+            fclose($socket);
+            if ($attempts >= $maxAttempts) {
+                logMailActivity($to, $subject, 'FAILED', 'No SMTP greeting');
+                return false;
+            }
+            continue;
+        }
+
+        $hostName = preg_replace('/[^a-zA-Z0-9.-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        if ($hostName === '') {
+            $hostName = 'localhost';
+        }
+
+        if (!smtpSendCommand($socket, 'EHLO ' . $hostName, array(250))) {
+            if (!smtpSendCommand($socket, 'HELO ' . $hostName, array(250))) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    logMailActivity($to, $subject, 'FAILED', 'EHLO/HELO failed');
+                    return false;
+                }
+                continue;
+            }
+        }
+
+        if (!smtpSendCommand($socket, 'AUTH LOGIN', array(334))
+            || !smtpSendCommand($socket, base64_encode($username), array(334))
+            || !smtpSendCommand($socket, base64_encode($password), array(235))) {
+            fclose($socket);
+            if ($attempts >= $maxAttempts) {
+                logMailActivity($to, $subject, 'FAILED', 'Authentication failed');
+                return false;
+            }
+            sleep(1);
+            continue;
+        }
+
+        if (!smtpSendCommand($socket, 'MAIL FROM:<' . MAIL_FROM_ADDRESS . '>', array(250))
+            || !smtpSendCommand($socket, 'RCPT TO:<' . $to . '>', array(250, 251))
+            || !smtpSendCommand($socket, 'DATA', array(354))) {
+            fclose($socket);
+            if ($attempts >= $maxAttempts) {
+                logMailActivity($to, $subject, 'FAILED', 'MAIL FROM/RCPT TO failed');
+                return false;
+            }
+            continue;
+        }
+
+        $headers = array(
+            'Date: ' . date(DATE_RFC2822),
+            'From: ' . smtpEncodeHeader(MAIL_FROM_NAME) . ' <' . MAIL_FROM_ADDRESS . '>',
+            'Reply-To: ' . $replyTo,
+            'To: <' . $to . '>',
+            'Subject: ' . smtpEncodeHeader($subject),
+            'MIME-Version: 1.0',
+            'Content-Type: text/html; charset=UTF-8',
+            'Content-Transfer-Encoding: quoted-printable',
+            'X-Mailer: Accounts Bazar'
+        );
+
+        $payload = implode("\r\n", $headers) . "\r\n\r\n" . smtpNormalizeBody($body);
+        if (fwrite($socket, $payload . "\r\n.\r\n") === false || !smtpExpectCode($socket, array(250))) {
+            fclose($socket);
+            if ($attempts >= $maxAttempts) {
+                logMailActivity($to, $subject, 'FAILED', 'Data transmission failed');
+                return false;
+            }
+            continue;
+        }
+
+        smtpSendCommand($socket, 'QUIT', array(221));
         fclose($socket);
-        return false;
+        logMailActivity($to, $subject, 'SUCCESS');
+        return true;
     }
 
-    if (!smtpSendCommand($socket, 'MAIL FROM:<' . MAIL_FROM_ADDRESS . '>', array(250))
-        || !smtpSendCommand($socket, 'RCPT TO:<' . $to . '>', array(250, 251))
-        || !smtpSendCommand($socket, 'DATA', array(354))) {
-        fclose($socket);
-        return false;
-    }
+    logMailActivity($to, $subject, 'FAILED', "Failed after $maxAttempts attempts");
+    return false;
+}
 
-    $headers = array(
-        'Date: ' . date(DATE_RFC2822),
-        'From: ' . smtpEncodeHeader(MAIL_FROM_NAME) . ' <' . MAIL_FROM_ADDRESS . '>',
-        'Reply-To: ' . $replyTo,
-        'To: <' . $to . '>',
-        'Subject: ' . smtpEncodeHeader($subject),
-        'MIME-Version: 1.0',
-        'Content-Type: text/plain; charset=UTF-8',
-        'Content-Transfer-Encoding: 8bit'
+// ==================== EMAIL TEMPLATE FUNCTIONS ====================
+
+/**
+ * HTML Email template wrapper
+ */
+function getEmailTemplate($title, $content, $ctaText = '', $ctaLink = '') {
+    $baseUrl = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'accountsbazar.com');
+    $supportEmail = MAIL_REPLY_TO;
+    
+    $html = <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 0 auto; background: #fff; }
+        .header { background: linear-gradient(135deg, #0f172a 60%, #0ea5e9); color: #fff; padding: 20px; text-align: center; }
+        .header h1 { margin: 0; font-size: 24px; }
+        .content { padding: 30px 20px; }
+        .content p { margin: 10px 0; }
+        .cta { text-align: center; margin: 30px 0; }
+        .cta a { background: #0ea5e9; color: #fff; padding: 12px 30px; text-decoration: none; border-radius: 6px; display: inline-block; }
+        .footer { background: #f8f9fa; padding: 20px; text-align: center; font-size: 12px; color: #999; border-top: 1px solid #eee; }
+        .footer a { color: #0ea5e9; text-decoration: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🛍️ Accounts Bazar</h1>
+        </div>
+        <div class="content">
+            <h2>$title</h2>
+            $content
+            HTML;
+    
+    if (!empty($ctaText) && !empty($ctaLink)) {
+        $html .= "<div class=\"cta\"><a href=\"$ctaLink\">$ctaText</a></div>";
+    }
+    
+    $html .= <<<HTML
+        </div>
+        <div class="footer">
+            <p>&copy; Accounts Bazar | <a href="$baseUrl">Visit Website</a></p>
+            <p>Need help? <a href="mailto:$supportEmail">Contact Support</a></p>
+        </div>
+    </div>
+</body>
+</html>
+HTML;
+    
+    return $html;
+}
+
+// ==================== NOTIFICATION EMAIL FUNCTIONS ====================
+
+/**
+ * Send registration confirmation email
+ */
+function sendRegistrationEmail($email, $name, $username) {
+    $baseUrl = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'accountsbazar.com');
+    $loginLink = $baseUrl . '/login.php';
+    
+    $content = "<p>Dear $name,</p>";
+    $content .= "<p>Welcome to <strong>Accounts Bazar</strong>! Your account has been successfully created.</p>";
+    $content .= "<p><strong>Your Login Credentials:</strong></p>";
+    $content .= "<ul>";
+    $content .= "<li><strong>Email:</strong> $email</li>";
+    $content .= "<li><strong>Username:</strong> $username</li>";
+    $content .= "</ul>";
+    $content .= "<p>You can now log in and start exploring our products.</p>";
+    
+    $body = getEmailTemplate('Welcome to Accounts Bazar!', $content, 'Login Now', $loginLink);
+    
+    return smtpSendMail($email, 'Welcome to Accounts Bazar – Account Created', $body);
+}
+
+/**
+ * Send order confirmation email
+ */
+function sendOrderConfirmationEmail($email, $name, $orderId, $orderDetails) {
+    $baseUrl = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'accountsbazar.com');
+    $orderLink = $baseUrl . '/order-details.php?id=' . urlencode($orderId);
+    
+    $content = "<p>Dear $name,</p>";
+    $content .= "<p>Thank you for your order! We've received your order and will process it shortly.</p>";
+    $content .= "<p><strong>Order Details:</strong></p>";
+    $content .= "<ul>";
+    $content .= "<li><strong>Order ID:</strong> $orderId</li>";
+    $content .= "<li><strong>Total Amount:</strong> " . $orderDetails['amount'] . "</li>";
+    $content .= "<li><strong>Status:</strong> Pending</li>";
+    $content .= "</ul>";
+    $content .= "<p>We'll send you updates about your order status.</p>";
+    
+    $body = getEmailTemplate('Order Confirmation', $content, 'View Order', $orderLink);
+    
+    return smtpSendMail($email, 'Order Confirmation – Order #' . $orderId, $body);
+}
+
+/**
+ * Send order status update email
+ */
+function sendOrderStatusEmail($email, $name, $orderId, $status, $message = '') {
+    $baseUrl = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'accountsbazar.com');
+    $orderLink = $baseUrl . '/order-details.php?id=' . urlencode($orderId);
+    
+    $statusMessages = array(
+        'processing' => 'Your order is being processed',
+        'shipped' => 'Your order has been shipped',
+        'delivered' => 'Your order has been delivered',
+        'cancelled' => 'Your order has been cancelled',
+        'refunded' => 'Your order has been refunded'
     );
-
-    $payload = implode("\r\n", $headers) . "\r\n\r\n" . smtpNormalizeBody($body);
-    if (fwrite($socket, $payload . "\r\n.\r\n") === false || !smtpExpectCode($socket, array(250))) {
-        fclose($socket);
-        return false;
+    
+    $statusTitle = $statusMessages[$status] ?? 'Order Status Updated';
+    
+    $content = "<p>Dear $name,</p>";
+    $content .= "<p><strong>$statusTitle</strong></p>";
+    $content .= "<p><strong>Order ID:</strong> $orderId</p>";
+    if (!empty($message)) {
+        $content .= "<p><strong>Details:</strong> $message</p>";
     }
+    
+    $body = getEmailTemplate('Order Status Update', $content, 'View Order', $orderLink);
+    
+    return smtpSendMail($email, 'Order Status Update – Order #' . $orderId, $body);
+}
 
-    smtpSendCommand($socket, 'QUIT', array(221));
-    fclose($socket);
-    return true;
+/**
+ * Send password reset email
+ */
+function sendPasswordResetEmail($email, $name, $resetLink) {
+    $content = "<p>Dear $name,</p>";
+    $content .= "<p>You requested to reset your password. Click the link below to create a new password:</p>";
+    $content .= "<p><strong>Note:</strong> This link will expire in 1 hour.</p>";
+    
+    $body = getEmailTemplate('Password Reset Request', $content, 'Reset Password', $resetLink);
+    
+    return smtpSendMail($email, 'Password Reset Request', $body);
+}
+
+/**
+ * Send support reply email
+ */
+function sendSupportReplyEmail($email, $name, $message, $threadLink) {
+    $content = "<p>Dear $name,</p>";
+    $content .= "<p>We have replied to your support message:</p>";
+    $content .= "<div style=\"background: #f5f5f5; padding: 15px; border-left: 4px solid #0ea5e9; margin: 15px 0;\">";
+    $content .= "<p>" . nl2br(htmlspecialchars($message)) . "</p>";
+    $content .= "</div>";
+    $content .= "<p>Click the link below to view the conversation:</p>";
+    
+    $body = getEmailTemplate('Support Reply', $content, 'View Conversation', $threadLink);
+    
+    return smtpSendMail($email, 'We Replied to Your Support Message', $body);
+}
+
+/**
+ * Send admin notification email
+ */
+function sendAdminNotificationEmail($adminEmail, $subject, $message, $actionLink = '') {
+    $content = "<p>Hello Admin,</p>";
+    $content .= "<p><strong>Alert:</strong> $message</p>";
+    if (!empty($actionLink)) {
+        $content .= "<p><strong>Action Required:</strong> <a href=\"$actionLink\">Click here to take action</a></p>";
+    }
+    
+    $body = getEmailTemplate('Admin Notification', $content);
+    
+    return smtpSendMail($adminEmail, '[ADMIN] ' . $subject, $body);
 }
