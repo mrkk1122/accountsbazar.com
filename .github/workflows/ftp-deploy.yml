@@ -6,6 +6,10 @@ on:
       - main
   workflow_dispatch:
 
+concurrency:
+  group: ftp-deploy-main
+  cancel-in-progress: true
+
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
@@ -30,3 +34,8 @@ jobs:
           local-dir: ./
           dangerous-clean-slate: false
           log-level: minimal
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/.env*
+            **/node_modules/**
