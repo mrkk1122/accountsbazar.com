@@ -303,6 +303,112 @@ function initNotificationCenter() {
         localStorage.setItem('ab_seen_notif_uids', JSON.stringify(map));
     }
 
+    function getPushedMap() {
+        try {
+            const data = localStorage.getItem('ab_pushed_notif_uids');
+            return data ? JSON.parse(data) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function setPushedMap(map) {
+        localStorage.setItem('ab_pushed_notif_uids', JSON.stringify(map));
+    }
+
+    function isHomePage() {
+        const path = (window.location.pathname || '').toLowerCase();
+        return path === '/' || path.endsWith('/index.php');
+    }
+
+    function ensureHomeNotificationPermission() {
+        if (!isHomePage() || !('Notification' in window)) {
+            return;
+        }
+
+        if (Notification.permission !== 'default') {
+            return;
+        }
+
+        const askKey = 'ab_notif_permission_asked_once';
+        try {
+            if (sessionStorage.getItem(askKey) === '1') {
+                return;
+            }
+            sessionStorage.setItem(askKey, '1');
+        } catch (e) {
+            // continue without session storage gate
+        }
+
+        setTimeout(function() {
+            Notification.requestPermission().catch(function() {
+                return 'default';
+            });
+        }, 900);
+    }
+
+    let swRegistrationPromise = null;
+    function getServiceWorkerRegistration() {
+        if (!('serviceWorker' in navigator)) {
+            return Promise.resolve(null);
+        }
+
+        if (!swRegistrationPromise) {
+            swRegistrationPromise = navigator.serviceWorker.getRegistration().then(function(reg) {
+                if (reg) {
+                    return reg;
+                }
+                return navigator.serviceWorker.register('sw.js').catch(function() {
+                    return null;
+                });
+            }).catch(function() {
+                return null;
+            });
+        }
+
+        return swRegistrationPromise;
+    }
+
+    function showSystemNotification(item) {
+        if (!item || !item.uid || !('Notification' in window) || Notification.permission !== 'granted') {
+            return;
+        }
+
+        const title = (item.title || 'Accounts Bazar').toString();
+        const body = (item.message || '').toString();
+        const targetUrl = (item.url || 'index.php').toString();
+
+        const pushedMap = getPushedMap();
+        if (pushedMap[item.uid]) {
+            return;
+        }
+
+        const notificationOptions = {
+            body: body,
+            icon: 'images/logo.png',
+            badge: 'favicon.png',
+            tag: 'ab-' + item.uid,
+            renotify: false,
+            data: {
+                url: targetUrl
+            }
+        };
+
+        getServiceWorkerRegistration().then(function(reg) {
+            if (reg && typeof reg.showNotification === 'function') {
+                reg.showNotification(title, notificationOptions);
+            } else {
+                new Notification(title, {
+                    body: body,
+                    icon: 'images/logo.png'
+                });
+            }
+
+            pushedMap[item.uid] = 1;
+            setPushedMap(pushedMap);
+        });
+    }
+
     function renderItems(items, seenMap) {
         if (!Array.isArray(items) || items.length === 0) {
             listEl.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
@@ -368,6 +474,35 @@ function initNotificationCenter() {
                     return item && item.uid && !seenMap[item.uid];
                 }).length;
 
+                const bootstrapKey = 'ab_notif_push_bootstrap_done';
+                const pushedMap = getPushedMap();
+                let shouldBootstrap = false;
+                try {
+                    shouldBootstrap = localStorage.getItem(bootstrapKey) !== '1';
+                } catch (e) {
+                    shouldBootstrap = false;
+                }
+
+                if (shouldBootstrap) {
+                    latestItems.forEach(function(item) {
+                        if (item && item.uid) {
+                            pushedMap[item.uid] = 1;
+                        }
+                    });
+                    setPushedMap(pushedMap);
+                    try {
+                        localStorage.setItem(bootstrapKey, '1');
+                    } catch (e) {
+                        // ignore storage errors
+                    }
+                } else {
+                    latestItems.forEach(function(item) {
+                        if (item && item.uid && !pushedMap[item.uid]) {
+                            showSystemNotification(item);
+                        }
+                    });
+                }
+
                 updateBadge(unreadCount);
                 renderItems(latestItems, seenMap);
             })
@@ -397,7 +532,8 @@ function initNotificationCenter() {
     });
 
     loadNotifications();
-    setInterval(loadNotifications, 30000);
+    ensureHomeNotificationPermission();
+    setInterval(loadNotifications, 10000);
 }
 
 function initHeaderSearch() {

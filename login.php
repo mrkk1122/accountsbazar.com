@@ -245,6 +245,19 @@ require_once 'products/includes/seo.php';
             line-height: 1;
         }
         .pw-toggle:hover { color: #0ea5e9; }
+        .forgot-pass-row {
+            margin-top: 7px;
+            text-align: right;
+        }
+        .forgot-pass-row a {
+            font-size: 12px;
+            font-weight: 700;
+            color: #0ea5e9;
+            text-decoration: none;
+        }
+        .forgot-pass-row a:hover {
+            text-decoration: underline;
+        }
         .login-alert-error {
             background: #fff0f0;
             border-left: 4px solid #e11d48;
@@ -358,10 +371,7 @@ require_once 'products/includes/seo.php';
                     >
                 </div>
                 <div class="lf-row">
-                    <label for="login-password" style="display:flex;justify-content:space-between;align-items:center;">
-                        <span>Password</span>
-                        <a href="forgot-password.php" style="font-size:12px;font-weight:600;color:#0ea5e9;text-decoration:none;" tabindex="-1">Forgot password?</a>
-                    </label>
+                    <label for="login-password">Password</label>
                     <div class="pw-wrap">
                         <input
                             id="login-password"
@@ -372,6 +382,9 @@ require_once 'products/includes/seo.php';
                             placeholder="Enter your password"
                         >
                         <button type="button" class="pw-toggle" onclick="togglePw()" aria-label="Show/hide password">👁</button>
+                    </div>
+                    <div class="forgot-pass-row">
+                        <a href="forgot-password.php">Forgot Password</a>
                     </div>
                 </div>
 

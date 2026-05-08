@@ -612,12 +612,21 @@ require_once 'products/includes/seo.php';
         var bar = document.getElementById('pwa-install-bar');
         var installBtn = document.getElementById('pwa-install-btn');
         var closeBtn = document.getElementById('pwa-install-close');
+        var dismissed = false;
+
+        try {
+            dismissed = sessionStorage.getItem('pwa_dismissed') === '1';
+        } catch (e) {
+            dismissed = false;
+        }
 
         // Show bar when browser fires beforeinstallprompt
         window.addEventListener('beforeinstallprompt', function (e) {
             e.preventDefault();
             deferredPrompt = e;
-            bar.style.display = 'flex';
+            if (!dismissed) {
+                bar.style.display = 'flex';
+            }
         });
 
         // Install button click
@@ -634,7 +643,10 @@ require_once 'products/includes/seo.php';
         closeBtn.addEventListener('click', function () {
             bar.style.display = 'none';
             // Don't show again for this session
-            try { sessionStorage.setItem('pwa_dismissed', '1'); } catch(e) {}
+            try {
+                sessionStorage.setItem('pwa_dismissed', '1');
+                dismissed = true;
+            } catch(e) {}
         });
 
         // Hide if already installed
