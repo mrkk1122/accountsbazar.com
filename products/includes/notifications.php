@@ -270,11 +270,18 @@ class NotificationManager {
      */
     public function notifyOrderCreated($orderId, $userId, $userEmail, $userName) {
         $orderDetails = $this->getOrderDetails($orderId);
+        $content = '<p>Dear ' . htmlspecialchars((string) $userName, ENT_QUOTES, 'UTF-8') . ',</p>';
+        $content .= '<p>Your order has been received successfully.</p>';
+        $content .= '<ul>';
+        $content .= '<li><strong>Order ID:</strong> ' . htmlspecialchars((string) $orderId, ENT_QUOTES, 'UTF-8') . '</li>';
+        $content .= '<li><strong>Total Amount:</strong> ' . htmlspecialchars((string) $orderDetails['amount'], ENT_QUOTES, 'UTF-8') . '</li>';
+        $content .= '<li><strong>Status:</strong> Pending</li>';
+        $content .= '</ul>';
         
         $emailData = array(
             'email' => $userEmail,
             'subject' => 'Order Confirmation – Order #' . $orderId,
-            'body' => sendOrderConfirmationEmail($userEmail, $userName, $orderId, $orderDetails)
+            'body' => getEmailTemplate('Order Confirmation', $content, 'View Order', 'https://accountsbazar.com/profile.php')
         );
         
         return $this->sendNotification(
@@ -288,10 +295,19 @@ class NotificationManager {
     }
     
     public function notifyOrderShipped($orderId, $userId, $userEmail, $userName, $trackingNumber = '') {
+        $content = '<p>Dear ' . htmlspecialchars((string) $userName, ENT_QUOTES, 'UTF-8') . ',</p>';
+        $content .= '<p>Your order has been shipped.</p>';
+        $content .= '<ul>';
+        $content .= '<li><strong>Order ID:</strong> ' . htmlspecialchars((string) $orderId, ENT_QUOTES, 'UTF-8') . '</li>';
+        if ($trackingNumber !== '') {
+            $content .= '<li><strong>Tracking Number:</strong> ' . htmlspecialchars((string) $trackingNumber, ENT_QUOTES, 'UTF-8') . '</li>';
+        }
+        $content .= '</ul>';
+
         $emailData = array(
             'email' => $userEmail,
             'subject' => 'Your Order Has Been Shipped',
-            'body' => sendOrderStatusEmail($userEmail, $userName, $orderId, 'shipped', $trackingNumber)
+            'body' => getEmailTemplate('Order Shipped', $content, 'View Order', 'https://accountsbazar.com/profile.php')
         );
         
         return $this->sendNotification(
@@ -305,10 +321,14 @@ class NotificationManager {
     }
     
     public function notifyOrderDelivered($orderId, $userId, $userEmail, $userName) {
+        $content = '<p>Dear ' . htmlspecialchars((string) $userName, ENT_QUOTES, 'UTF-8') . ',</p>';
+        $content .= '<p>Your order has been delivered successfully.</p>';
+        $content .= '<p><strong>Order ID:</strong> ' . htmlspecialchars((string) $orderId, ENT_QUOTES, 'UTF-8') . '</p>';
+
         $emailData = array(
             'email' => $userEmail,
             'subject' => 'Your Order Has Been Delivered',
-            'body' => sendOrderStatusEmail($userEmail, $userName, $orderId, 'delivered')
+            'body' => getEmailTemplate('Order Delivered', $content, 'Shop Again', 'https://accountsbazar.com/shop.php')
         );
         
         return $this->sendNotification(

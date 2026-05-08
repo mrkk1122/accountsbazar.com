@@ -176,91 +176,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         $ii->execute();
         $ii->close();
 
-<<<<<<< HEAD
-        $db->closeConnection();
-
-        // ---- Get user email for notifications ----
-        $db   = new Database();
-        $conn = $db->getConnection();
-        $userStmt = $conn->prepare('SELECT email, first_name FROM users WHERE id = ? LIMIT 1');
-        $userStmt->bind_param('i', $userId);
-        $userStmt->execute();
-        $userResult = $userStmt->get_result();
-        $userStmt->close();
-        
-        $userEmail = '';
-        $userName = $fullName;
-        if ($userResult && $userResult->num_rows > 0) {
-            $userData = $userResult->fetch_assoc();
-            $userEmail = (string) ($userData['email'] ?? '');
-            $userName = (string) ($userData['first_name'] ?? $fullName);
-        }
-        $db->closeConnection();
-
-        // ---- Send notifications through notification manager ----
         try {
             $notificationManager = new NotificationManager();
-            
-            // Prepare order details for email
-            $orderDetails = array('amount' => 'BDT ' . number_format($price, 2));
-            
-            // Create in-app notification and queue email
-            if (!empty($userEmail)) {
-                $emailBody = sendOrderConfirmationEmail($userEmail, $userName, $orderNum, $orderDetails);
-                
-                $notificationManager->sendNotification(
-                    $userId,
-                    'order',
-                    'Order Confirmed',
-                    "Your order $orderNum has been received. Amount: BDT " . number_format($price, 2),
-                    $orderNum,
-                    array(
-                        'email' => $userEmail,
-                        'subject' => "Order Confirmed: $orderNum | Accounts Bazar",
-                        'body' => $emailBody
-                    )
-                );
-            } else {
-                // Fallback to direct email if notification manager fails
-                $mailSubject = "Order Confirmed: $orderNum | Accounts Bazar";
-                $mailBody    = "Dear $fullName,\r\n\r\n";
-                $mailBody   .= "Thank you for your order! Here are your order details:\r\n\r\n";
-                $mailBody   .= "Order Number : $orderNum\r\n";
-                $mailBody   .= "Product      : {$prod['name']}\r\n";
-                $mailBody   .= "Plan         : {$allowedPlans[$plan]}\r\n";
-                $mailBody   .= "Amount       : BDT " . number_format($price, 2) . "\r\n";
-                $mailBody   .= "Payment      : $payMethod\r\n";
-                $mailBody   .= "TrxID        : $trxId\r\n\r\n";
-                $mailBody   .= "We will verify your payment and process your order shortly.\r\n\r\n";
-                $mailBody   .= "Thanks,\r\nAccounts Bazar Team";
-                
-                if (!empty($userEmail)) {
-                    smtpSendMail($userEmail, $mailSubject, $mailBody);
-                }
-            }
-        } catch (Exception $e) {
-            // Log error but don't fail the order
-            logMailActivity('', "Order $orderNum", 'ERROR', $e->getMessage());
-=======
-        // Queue confirmation email
-        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $mailSubject = 'Order Confirmed: ' . $orderNum . ' | Accounts Bazar';
-            $mailBody  = "Dear $fullName,\r\n\r\n";
-            $mailBody .= "Thank you for your order! Here are your details:\r\n\r\n";
-            $mailBody .= "Order Number : $orderNum\r\n";
-            $mailBody .= "Product      : {$prod['name']}\r\n";
-            $mailBody .= "Plan         : {$allowedPlans[$plan]}\r\n";
-            $mailBody .= "Occasion     : {$occasion}\r\n";
-            $mailBody .= "Delivery     : {$deliveryLabel} ({$deliveryWindow})\r\n";
-            $mailBody .= "Subtotal     : BDT " . number_format($subtotal, 2) . "\r\n";
-            $mailBody .= "Discount     : BDT " . number_format($discountAmount, 2) . "\r\n";
-            $mailBody .= "Final Total  : BDT " . number_format($price, 2) . "\r\n";
-            $mailBody .= "Payment      : $payMethod\r\n";
-            $mailBody .= "TrxID        : $trxId\r\n\r\n";
-            $mailBody .= "Thanks,\r\nAccounts Bazar Team";
-            enqueueEmail($conn, $email, $mailSubject, $mailBody);
-            processEmailQueue($conn, 5);
->>>>>>> 43bfb442da3c38a00f6eae675e3e26b688c0ce67
+            $mailContent = '<p>Dear ' . htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') . ',</p>';
+            $mailContent .= '<p>Thank you for your order! Here are your details:</p>';
+            $mailContent .= '<ul>';
+            $mailContent .= '<li><strong>Order Number:</strong> ' . htmlspecialchars($orderNum, ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Product:</strong> ' . htmlspecialchars((string) $prod['name'], ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Plan:</strong> ' . htmlspecialchars($allowedPlans[$plan], ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Occasion:</strong> ' . htmlspecialchars($occasion, ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Delivery:</strong> ' . htmlspecialchars($deliveryLabel . ' (' . $deliveryWindow . ')', ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Subtotal:</strong> BDT ' . number_format($subtotal, 2) . '</li>';
+            $mailContent .= '<li><strong>Discount:</strong> BDT ' . number_format($discountAmount, 2) . '</li>';
+            $mailContent .= '<li><strong>Final Total:</strong> BDT ' . number_format($price, 2) . '</li>';
+            $mailContent .= '<li><strong>Payment:</strong> ' . htmlspecialchars($payMethod, ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>TrxID:</strong> ' . htmlspecialchars($trxId, ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '</ul>';
+
+            $notificationManager->sendNotification(
+                $userId,
+                'order',
+                'Order Confirmed',
+                'Your order ' . $orderNum . ' has been received. Amount: BDT ' . number_format($price, 2),
+                $orderNum,
+                array(
+                    'email' => $email,
+                    'subject' => $mailSubject,
+                    'body' => getEmailTemplate('Order Confirmation', $mailContent, 'View Orders', 'https://accountsbazar.com/profile.php')
+                )
+            );
+        } catch (Exception $e) {
+            logMailActivity($email, 'Order ' . $orderNum, 'ERROR', $e->getMessage());
         }
 
         $db->closeConnection();
