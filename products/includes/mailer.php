@@ -44,6 +44,19 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         return false;
     }
+    $missingCredentials = array();
+    $smtpUsername = MAIL_SMTP_USERNAME;
+    $smtpPassword = MAIL_SMTP_PASSWORD;
+    if (!is_string($smtpUsername) || trim($smtpUsername) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_USERNAME';
+    }
+    if (!is_string($smtpPassword) || trim($smtpPassword) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
+    }
+    if (!empty($missingCredentials)) {
+        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '. Set environment variables MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.');
+        return false;
+    }
 
     $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
     $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
