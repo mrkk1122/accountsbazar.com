@@ -89,9 +89,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $insStmt->execute();
                     $insStmt->close();
 
-                    $db->closeConnection();
-
-                    // Send OTP email
+                    // Queue OTP email
                     $subject  = 'Accounts Bazar – Password Reset OTP';
                     $body  = "Hello,\r\n\r\n";
                     $body .= "We received a request to reset the password for your Accounts Bazar account.\r\n\r\n";
@@ -101,10 +99,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
                     $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
 
-                    $mailSent = smtpSendMail($email, $subject, $body);
+                    $mailQueued = enqueueEmail($conn, $email, $subject, $body);
+                    // Best effort immediate flush for OTP UX
+                    processEmailQueue($conn, 3);
+                    $db->closeConnection();
 
-                    if (!$mailSent) {
-                        $error = 'Could not send OTP email. Please try again or contact support.';
+                    if (!$mailQueued) {
+                        $error = 'Could not queue OTP email. Please try again or contact support.';
                     } else {
                         $_SESSION['fp_step']   = 'otp';
                         $_SESSION['fp_email']  = $email;

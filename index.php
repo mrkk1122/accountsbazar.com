@@ -59,6 +59,8 @@ $seo = [
     'og_type'     => 'website',
 ];
 require_once 'products/includes/seo.php';
+require_once 'products/config/webpush.php';
+$webPushPublicKey = defined('WEBPUSH_PUBLIC_KEY') ? (string) WEBPUSH_PUBLIC_KEY : '';
 ?>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/mobile.css">
@@ -448,7 +450,7 @@ require_once 'products/includes/seo.php';
                                     ? 'products/' . $imagePath
                                     : $imagePath;
                                 ?>
-                                <img class="product-image" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>">
+                                <img class="product-image" loading="lazy" decoding="async" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name'] . ' flower bouquet'); ?>">
                             <?php else: ?>
                                 <div class="product-image">📦</div>
                             <?php endif; ?>
@@ -559,6 +561,9 @@ require_once 'products/includes/seo.php';
         <button id="pwa-install-close" class="pwa-fab-close" aria-label="Close">✕</button>
     </div>
 
+    <script>
+    window.AB_WEBPUSH_PUBLIC_KEY = <?php echo json_encode($webPushPublicKey, JSON_UNESCAPED_SLASHES); ?>;
+    </script>
     <script src="js/client.js"></script>
     <script>
     (function () {

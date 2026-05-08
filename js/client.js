@@ -321,8 +321,87 @@ function initNotificationCenter() {
         return path === '/' || path.endsWith('/index.php');
     }
 
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    function getVapidPublicKey() {
+        var fromWindow = (window.AB_WEBPUSH_PUBLIC_KEY || '').toString().trim();
+        if (fromWindow) {
+            return fromWindow;
+        }
+
+        var meta = document.querySelector('meta[name="ab-webpush-public-key"]');
+        if (meta) {
+            return (meta.getAttribute('content') || '').toString().trim();
+        }
+
+        return '';
+    }
+
+    function savePushSubscription(subscription) {
+        if (!subscription) {
+            return Promise.resolve(false);
+        }
+
+        return fetch('push-subscription.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'subscribe',
+                subscription: subscription.toJSON()
+            })
+        }).then(function(response) {
+            return response.json();
+        }).then(function(data) {
+            return !!(data && data.success);
+        }).catch(function() {
+            return false;
+        });
+    }
+
+    function ensurePushSubscription() {
+        const vapidKey = getVapidPublicKey();
+        if (!vapidKey || !('serviceWorker' in navigator)) {
+            return Promise.resolve(false);
+        }
+
+        return getServiceWorkerRegistration().then(function(reg) {
+            if (!reg || !reg.pushManager) {
+                return false;
+            }
+
+            return reg.pushManager.getSubscription().then(function(existing) {
+                if (existing) {
+                    return savePushSubscription(existing);
+                }
+
+                return reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapidKey)
+                }).then(function(subscription) {
+                    return savePushSubscription(subscription);
+                });
+            });
+        }).catch(function() {
+            return false;
+        });
+    }
+
     function ensureHomeNotificationPermission() {
         if (!isHomePage() || !('Notification' in window)) {
+            return;
+        }
+
+        if (Notification.permission === 'granted') {
+            ensurePushSubscription();
             return;
         }
 
@@ -341,7 +420,11 @@ function initNotificationCenter() {
         }
 
         setTimeout(function() {
-            Notification.requestPermission().catch(function() {
+            Notification.requestPermission().then(function(permission) {
+                if (permission === 'granted') {
+                    ensurePushSubscription();
+                }
+            }).catch(function() {
                 return 'default';
             });
         }, 900);

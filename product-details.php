@@ -175,6 +175,41 @@ require_once 'products/includes/seo.php';
     echo json_encode($productSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     ?>
     </script>
+    <script type="application/ld+json">
+    <?php
+    $faqSchema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'FAQPage',
+        'mainEntity' => [
+            [
+                '@type' => 'Question',
+                'name' => 'How fast is delivery for ' . (string) ($product['name'] ?? 'this product') . '?',
+                'acceptedAnswer' => [
+                    '@type' => 'Answer',
+                    'text' => 'Most orders are verified quickly and delivered within the mentioned service window after payment confirmation.'
+                ]
+            ],
+            [
+                '@type' => 'Question',
+                'name' => 'Can I customize this order with message or occasion?',
+                'acceptedAnswer' => [
+                    '@type' => 'Answer',
+                    'text' => 'Yes. During checkout you can choose occasion templates, bouquet style preferences, and add a personalized card message.'
+                ]
+            ],
+            [
+                '@type' => 'Question',
+                'name' => 'Which payment methods are supported?',
+                'acceptedAnswer' => [
+                    '@type' => 'Answer',
+                    'text' => 'We currently support bKash, Nagad, and Rocket for secure checkout.'
+                ]
+            ]
+        ]
+    ];
+    echo json_encode($faqSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ?>
+    </script>
     <?php endif; ?>
 </head>
 <body>
@@ -349,7 +384,7 @@ require_once 'products/includes/seo.php';
                             ?>
                             <article class="details-suggest-card" onclick="window.location.href='product-details.php?id=<?php echo (int) $suggested['id']; ?>'" role="link" tabindex="0" onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='product-details.php?id=<?php echo (int) $suggested['id']; ?>'; }">
                                 <?php if (!empty($suggested['image'])): ?>
-                                    <img class="details-suggest-image" src="<?php echo htmlspecialchars($suggestImageSrc); ?>" alt="<?php echo htmlspecialchars($suggested['name']); ?>">
+                                    <img class="details-suggest-image" loading="lazy" decoding="async" src="<?php echo htmlspecialchars($suggestImageSrc); ?>" alt="<?php echo htmlspecialchars($suggested['name'] . ' flower bouquet'); ?>">
                                 <?php else: ?>
                                     <div class="details-suggest-image">No Image</div>
                                 <?php endif; ?>

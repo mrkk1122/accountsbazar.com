@@ -37,51 +37,93 @@ require_once 'products/config/config.php';
 require_once 'products/includes/db.php';
 require_once 'products/includes/mailer.php';
 
-if (empty($_SESSION['user_id'])) {
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
-        header('Content-Type: application/json');
-        echo json_encode(['success' => false, 'message' => 'Please login first to access checkout.']);
-        exit;
+function checkoutResolveUserId($conn, $fullName, $email, $phone) {
+    if (!empty($_SESSION['user_id'])) {
+        return (int) $_SESSION['user_id'];
     }
 
-    $redirectTarget = urlencode((string) ($_SERVER['REQUEST_URI'] ?? 'checkout.php'));
-    $loginUrl = 'login.php?redirect=' . $redirectTarget . '&message=' . urlencode('Please login first to open checkout.');
-    if (!headers_sent()) {
-        header('Location: ' . $loginUrl);
-    } else {
-        echo '<!DOCTYPE html><html><head><meta charset="UTF-8">';
-        echo '<meta http-equiv="refresh" content="0;url=' . htmlspecialchars($loginUrl, ENT_QUOTES, 'UTF-8') . '">';
-        echo '<script>window.location.href=' . json_encode($loginUrl) . ';</script>';
-        echo '</head><body></body></html>';
+    $email = strtolower(trim((string) $email));
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return 0;
     }
-    exit;
+
+    $find = $conn->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+    $find->bind_param('s', $email);
+    $find->execute();
+    $existing = $find->get_result()->fetch_assoc();
+    $find->close();
+    if ($existing) {
+        return (int) $existing['id'];
+    }
+
+    $nameParts = preg_split('/\s+/', trim((string) $fullName));
+    $firstName = (string) ($nameParts[0] ?? 'Guest');
+    $lastName = (string) ($nameParts[1] ?? 'Customer');
+    $baseUsername = 'guest_' . preg_replace('/[^a-z0-9]/i', '', strstr($email, '@', true) ?: 'user');
+    if ($baseUsername === 'guest_') {
+        $baseUsername = 'guest_user';
+    }
+    $username = $baseUsername . '_' . substr(md5((string) microtime(true)), 0, 6);
+    $passwordHash = password_hash(bin2hex(random_bytes(12)), PASSWORD_BCRYPT);
+
+    $ins = $conn->prepare('INSERT INTO users (username, email, password, first_name, last_name, phone, user_type, is_active) VALUES (?, ?, ?, ?, ?, ?, "customer", 1)');
+    $ins->bind_param('ssssss', $username, $email, $passwordHash, $firstName, $lastName, $phone);
+    $ok = $ins->execute();
+    $guestId = $ok ? (int) $conn->insert_id : 0;
+    $ins->close();
+
+    return $guestId;
 }
 
-// ---- Handle AJAX order submission ----
+// ---- Handle AJAX order submission (supports guest checkout) ----
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_WITH'])) {
     header('Content-Type: application/json');
+
     $pid        = (int) ($_POST['product_id']      ?? 0);
     $plan       = trim((string) ($_POST['plan']    ?? '1-month'));
     $fullName   = trim((string) ($_POST['name']    ?? ''));
     $phone      = trim((string) ($_POST['phone']   ?? ''));
-    $address    = trim((string) ($_POST['address'] ?? ''));
+    $email      = trim((string) ($_POST['address'] ?? ''));
     $payMethod  = trim((string) ($_POST['payment_method'] ?? ''));
     $trxId      = trim((string) ($_POST['trx_id'] ?? ''));
+    $deliveryDate   = trim((string) ($_POST['delivery_date'] ?? 'today'));
+    $deliveryWindow = trim((string) ($_POST['delivery_window'] ?? '10am-1pm'));
+    $occasion       = trim((string) ($_POST['occasion'] ?? 'General'));
+    $bouquetColor   = trim((string) ($_POST['bouquet_color'] ?? 'Mixed'));
+    $bouquetTheme   = trim((string) ($_POST['bouquet_theme'] ?? 'Classic'));
+    $cardMessage    = trim((string) ($_POST['card_message'] ?? ''));
+    $couponCode     = strtoupper(trim((string) ($_POST['coupon_code'] ?? '')));
 
-    if (!$pid || !$fullName || !$phone || !$address || !$payMethod || !$trxId) {
+    if (!$pid || !$fullName || !$phone || !$email || !$payMethod || !$trxId) {
         echo json_encode(['success' => false, 'message' => 'Missing required fields.']);
+        exit;
+    }
+
+    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        echo json_encode(['success' => false, 'message' => 'Please provide a valid email.']);
         exit;
     }
 
     $allowedPlans = ['1-month'=>'1 Month','2-month'=>'2 Month','6-month'=>'6 Month','lifetime'=>'Life Time'];
     $planMultiplier = ['1-month' => 1, '2-month' => 2, '6-month' => 6, 'lifetime' => 12];
-    if (!isset($allowedPlans[$plan])) $plan = '1-month';
+    $allowedWindows = ['10am-1pm', '1pm-5pm', '5pm-9pm'];
+    $validOccasions = ['Birthday','Anniversary','Sorry','Love','Congratulations','General'];
+    $coupons = ['FLOWER10' => 10, 'LOVE15' => 15, 'WELCOME5' => 5];
+
+    if (!isset($allowedPlans[$plan])) {
+        $plan = '1-month';
+    }
+    if (!in_array($deliveryWindow, $allowedWindows, true)) {
+        $deliveryWindow = '10am-1pm';
+    }
+    if (!in_array($occasion, $validOccasions, true)) {
+        $occasion = 'General';
+    }
 
     try {
         $db   = new Database();
         $conn = $db->getConnection();
 
-        // Get product price
         $ps = $conn->prepare('SELECT id, name, price FROM products WHERE id = ? AND quantity >= 0 LIMIT 1');
         $ps->bind_param('i', $pid);
         $ps->execute();
@@ -95,11 +137,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 
         $basePrice = (float) $prod['price'];
         $multiplier = (float) ($planMultiplier[$plan] ?? 1);
-        $price     = $basePrice * $multiplier;
-        $orderNum  = 'ORD-' . strtoupper(substr(md5(uniqid()), 0, 8));
-        $userId    = !empty($_SESSION['user_id']) ? (int) $_SESSION['user_id'] : 1;
-        $shippAddr = "Name: $fullName | Phone: $phone | Plan: {$allowedPlans[$plan]}\nAddress: $address";
-        $notes     = "Payment: $payMethod | TrxID: $trxId";
+        $subtotal = $basePrice * $multiplier;
+        $discountPercent = (float) ($coupons[$couponCode] ?? 0);
+        $discountAmount = round($subtotal * ($discountPercent / 100), 2);
+        $price = max(0, $subtotal - $discountAmount);
+
+        $userId = checkoutResolveUserId($conn, $fullName, $email, $phone);
+        if ($userId <= 0) {
+            echo json_encode(['success' => false, 'message' => 'Could not create guest checkout profile.']);
+            exit;
+        }
+
+        $orderNum  = 'ORD-' . strtoupper(substr(md5(uniqid('', true)), 0, 8));
+
+        $deliveryLabel = $deliveryDate === 'tomorrow' ? 'Tomorrow' : 'Today';
+        $shippAddr = "Name: $fullName | Phone: $phone | Email: $email | Plan: {$allowedPlans[$plan]}\n";
+        $shippAddr .= "Delivery: {$deliveryLabel} ({$deliveryWindow}) | Occasion: {$occasion}";
+
+        $notes  = "Payment: $payMethod | TrxID: $trxId\n";
+        $notes .= "Bouquet Color: $bouquetColor | Theme: $bouquetTheme\n";
+        $notes .= "Coupon: " . ($couponCode !== '' ? $couponCode : 'N/A') . " | Discount: " . number_format($discountAmount, 2) . "\n";
+        if ($cardMessage !== '') {
+            $notes .= "Card Message: " . $cardMessage;
+        }
 
         $ins = $conn->prepare(
             'INSERT INTO orders (order_number, user_id, total_amount, status, payment_method, payment_status, shipping_address, notes)
@@ -110,34 +170,39 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         $orderId = $conn->insert_id;
         $ins->close();
 
-        // Order item
-        $ii = $conn->prepare(
-            'INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price) VALUES (?, ?, 1, ?, ?)'
-        );
+        $ii = $conn->prepare('INSERT INTO order_items (order_id, product_id, quantity, unit_price, total_price) VALUES (?, ?, 1, ?, ?)');
         $ii->bind_param('iidd', $orderId, $pid, $price, $price);
         $ii->execute();
         $ii->close();
 
-        $db->closeConnection();
-
-        // ---- Send confirmation email to customer ----
-        $customerEmail = $address; // address field holds email value
-        if (filter_var($customerEmail, FILTER_VALIDATE_EMAIL)) {
-            $mailSubject = "Order Confirmed: $orderNum | Accounts Bazar";
-            $mailBody    = "Dear $fullName,\r\n\r\n";
-            $mailBody   .= "Thank you for your order! Here are your order details:\r\n\r\n";
-            $mailBody   .= "Order Number : $orderNum\r\n";
-            $mailBody   .= "Product      : {$prod['name']}\r\n";
-            $mailBody   .= "Plan         : {$allowedPlans[$plan]}\r\n";
-            $mailBody   .= "Amount       : BDT " . number_format($price, 2) . "\r\n";
-            $mailBody   .= "Payment      : $payMethod\r\n";
-            $mailBody   .= "TrxID        : $trxId\r\n\r\n";
-            $mailBody   .= "We will verify your payment and process your order shortly.\r\n\r\n";
-            $mailBody   .= "Thanks,\r\nAccounts Bazar Team";
-            smtpSendMail($customerEmail, $mailSubject, $mailBody);
+        // Queue confirmation email
+        if (filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $mailSubject = 'Order Confirmed: ' . $orderNum . ' | Accounts Bazar';
+            $mailBody  = "Dear $fullName,\r\n\r\n";
+            $mailBody .= "Thank you for your order! Here are your details:\r\n\r\n";
+            $mailBody .= "Order Number : $orderNum\r\n";
+            $mailBody .= "Product      : {$prod['name']}\r\n";
+            $mailBody .= "Plan         : {$allowedPlans[$plan]}\r\n";
+            $mailBody .= "Occasion     : {$occasion}\r\n";
+            $mailBody .= "Delivery     : {$deliveryLabel} ({$deliveryWindow})\r\n";
+            $mailBody .= "Subtotal     : BDT " . number_format($subtotal, 2) . "\r\n";
+            $mailBody .= "Discount     : BDT " . number_format($discountAmount, 2) . "\r\n";
+            $mailBody .= "Final Total  : BDT " . number_format($price, 2) . "\r\n";
+            $mailBody .= "Payment      : $payMethod\r\n";
+            $mailBody .= "TrxID        : $trxId\r\n\r\n";
+            $mailBody .= "Thanks,\r\nAccounts Bazar Team";
+            enqueueEmail($conn, $email, $mailSubject, $mailBody);
+            processEmailQueue($conn, 5);
         }
 
-        echo json_encode(['success' => true, 'order_number' => $orderNum]);
+        $db->closeConnection();
+
+        echo json_encode([
+            'success' => true,
+            'order_number' => $orderNum,
+            'total_amount' => number_format($price, 2, '.', ''),
+            'discount_amount' => number_format($discountAmount, 2, '.', ''),
+        ]);
     } catch (Exception $e) {
         echo json_encode(['success' => false, 'message' => 'DB error: ' . $e->getMessage()]);
     }
@@ -260,7 +325,7 @@ require_once 'products/includes/seo.php';
                     <div class="checkout-grid">
                         <div class="details-image-box">
                             <?php if (!empty($product['image'])): ?>
-                                <img class="details-image" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>">
+                                <img class="details-image" loading="lazy" decoding="async" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name'] . ' flower bouquet'); ?>">
                             <?php else: ?>
                                 <div class="details-image">No image available</div>
                             <?php endif; ?>
@@ -277,15 +342,87 @@ require_once 'products/includes/seo.php';
                             <form class="details-review-form" id="checkout-form" action="#" method="POST" onsubmit="return handleCheckoutSubmit(event);">
                                 <div class="review-form-row">
                                     <label for="customer-name">Full Name</label>
-                                    <input id="customer-name" type="text" required placeholder="Enter your full name" value="<?php echo htmlspecialchars($billingName); ?>" <?php if (!empty($billingName)) echo 'readonly'; ?>>
+                                    <input id="customer-name" type="text" required placeholder="Enter your full name" value="<?php echo htmlspecialchars($billingName); ?>">
                                 </div>
                                 <div class="review-form-row">
                                     <label for="customer-phone">Phone</label>
-                                    <input id="customer-phone" type="text" required placeholder="Enter phone number" value="<?php echo htmlspecialchars($billingPhone); ?>" <?php if (!empty($billingPhone)) echo 'readonly'; ?>>
+                                    <input id="customer-phone" type="text" required placeholder="Enter phone number" value="<?php echo htmlspecialchars($billingPhone); ?>">
                                 </div>
                                 <div class="review-form-row">
                                     <label for="customer-email">Email</label>
-                                    <input id="customer-email" type="email" required placeholder="Enter your email" value="<?php echo htmlspecialchars($billingAddress); ?>" <?php if (!empty($billingAddress)) echo 'readonly'; ?>>
+                                    <input id="customer-email" type="email" required placeholder="Enter your email" value="<?php echo htmlspecialchars($billingAddress); ?>">
+                                </div>
+
+                                <div class="review-form-row">
+                                    <label for="delivery-date">Delivery Date</label>
+                                    <select id="delivery-date" name="delivery_date">
+                                        <option value="today">Today</option>
+                                        <option value="tomorrow">Tomorrow</option>
+                                    </select>
+                                </div>
+                                <div class="review-form-row">
+                                    <label for="delivery-window">Delivery Time Window</label>
+                                    <select id="delivery-window" name="delivery_window">
+                                        <option value="10am-1pm">10AM - 1PM</option>
+                                        <option value="1pm-5pm">1PM - 5PM</option>
+                                        <option value="5pm-9pm">5PM - 9PM</option>
+                                    </select>
+                                </div>
+
+                                <div class="review-form-row">
+                                    <label for="occasion-template">Occasion Template</label>
+                                    <select id="occasion-template" name="occasion" onchange="applyOccasionTemplate()">
+                                        <option value="General">General</option>
+                                        <option value="Birthday">Birthday</option>
+                                        <option value="Anniversary">Anniversary</option>
+                                        <option value="Sorry">Sorry</option>
+                                        <option value="Love">Love</option>
+                                        <option value="Congratulations">Congratulations</option>
+                                    </select>
+                                </div>
+
+                                <div class="review-form-row review-form-row-half">
+                                    <div>
+                                        <label for="bouquet-color">Bouquet Color</label>
+                                        <select id="bouquet-color" name="bouquet_color">
+                                            <option value="Mixed">Mixed</option>
+                                            <option value="Red">Red</option>
+                                            <option value="White">White</option>
+                                            <option value="Pink">Pink</option>
+                                            <option value="Yellow">Yellow</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="bouquet-theme">Bouquet Theme</label>
+                                        <select id="bouquet-theme" name="bouquet_theme">
+                                            <option value="Classic">Classic</option>
+                                            <option value="Elegant">Elegant</option>
+                                            <option value="Romantic">Romantic</option>
+                                            <option value="Luxury">Luxury</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div class="review-form-row">
+                                    <label for="card-message">Card Message (Optional)</label>
+                                    <textarea id="card-message" name="card_message" rows="3" maxlength="250" placeholder="Write a short message for the flower card..."></textarea>
+                                </div>
+
+                                <div class="review-form-row review-form-row-half">
+                                    <div>
+                                        <label for="coupon-code">Coupon</label>
+                                        <input id="coupon-code" type="text" placeholder="FLOWER10" style="text-transform:uppercase;">
+                                    </div>
+                                    <div style="display:flex;align-items:flex-end;">
+                                        <button type="button" class="product-btn cart-btn" style="width:100%;" onclick="applyCoupon()">Apply Coupon</button>
+                                    </div>
+                                </div>
+                                <p id="coupon-hint" style="margin:-6px 0 12px;color:#64748b;font-size:12px;">Suggested: FLOWER10, LOVE15, WELCOME5</p>
+
+                                <div class="checkout-trust-strip" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:10px 0 18px;">
+                                    <div class="trust-pill">🔒 Secure Checkout</div>
+                                    <div class="trust-pill">⚡ Same-Day Support</div>
+                                    <div class="trust-pill">✅ Verified Payment</div>
                                 </div>
 
                                 <!-- Payment Method Selection -->
@@ -415,21 +552,41 @@ require_once 'products/includes/seo.php';
 
     <style>
     @keyframes btn-pulse {
-        0%   { opacity: 1; }
-        50%  { opacity: .55; }
+        0% { opacity: 1; }
+        50% { opacity: .55; }
         100% { opacity: 1; }
     }
+
     #place-order-btn.loading {
         animation: btn-pulse 1s infinite;
-                                    <div style="margin-top:24px;"></div>
-                                    <button class="product-btn buy-btn details-buy-full" id="place-order-btn" type="submit">Place Order</button>
     }
-    .details-review-form input[readonly] {
-        background: #f1f5f9;
-        color: #64748b;
-        cursor: not-allowed;
-        border-color: #cbd5e1;
+
+    .review-form-row select,
+    .review-form-row textarea {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #cbd5e1;
+        border-radius: 8px;
+        font-size: 14px;
     }
+
+    .review-form-row-half {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    .trust-pill {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px;
+        font-size: 11px;
+        font-weight: 700;
+        color: #334155;
+        text-align: center;
+        padding: 8px 6px;
+    }
+
     .copy-btn {
         background: none;
         border: 1px solid #cbd5e1;
@@ -442,10 +599,19 @@ require_once 'products/includes/seo.php';
     }
     .copy-btn:hover { background: #e2e8f0; }
     .copy-btn.copied { border-color: #16a34a; background: #f0fff4; }
-        .payment-section { margin-bottom: 24px; }
+    .payment-section { margin-bottom: 24px; }
+
+    @media (max-width: 640px) {
+        .review-form-row-half {
+            grid-template-columns: 1fr;
+        }
+    }
     </style>
     <script src="js/client.js"></script>
     <script>
+    var appliedCouponCode = '';
+    var checkoutAbandonedSent = false;
+
     function copyNum(btn, num) {
         navigator.clipboard.writeText(num).then(function() {
             btn.textContent = '✔';
@@ -455,7 +621,6 @@ require_once 'products/includes/seo.php';
                 btn.classList.remove('copied');
             }, 2000);
         }).catch(function() {
-            // fallback for older browsers
             var el = document.createElement('input');
             el.value = num;
             document.body.appendChild(el);
@@ -470,6 +635,61 @@ require_once 'products/includes/seo.php';
             }, 2000);
         });
     }
+
+    function applyOccasionTemplate() {
+        var occasion = document.getElementById('occasion-template').value;
+        var card = document.getElementById('card-message');
+        var color = document.getElementById('bouquet-color');
+        var theme = document.getElementById('bouquet-theme');
+
+        var templates = {
+            'Birthday': 'Happy Birthday! Wishing you joy, smiles, and beautiful moments.',
+            'Anniversary': 'Happy Anniversary! Wishing you a lifetime of love and happiness.',
+            'Sorry': 'I am truly sorry. Please accept these flowers as a small apology.',
+            'Love': 'You are special to me. Sending love and warm wishes.',
+            'Congratulations': 'Congratulations on your achievement! So proud of you.',
+            'General': ''
+        };
+
+        var palettes = {
+            'Birthday': ['Yellow', 'Elegant'],
+            'Anniversary': ['Red', 'Romantic'],
+            'Sorry': ['White', 'Classic'],
+            'Love': ['Red', 'Romantic'],
+            'Congratulations': ['Mixed', 'Luxury'],
+            'General': ['Mixed', 'Classic']
+        };
+
+        if (card && templates[occasion]) {
+            card.value = templates[occasion];
+        }
+        if (color && theme && palettes[occasion]) {
+            color.value = palettes[occasion][0];
+            theme.value = palettes[occasion][1];
+        }
+    }
+
+    function applyCoupon() {
+        var couponInput = document.getElementById('coupon-code');
+        var hint = document.getElementById('coupon-hint');
+        var code = (couponInput.value || '').trim().toUpperCase();
+        var discounts = {
+            'FLOWER10': 10,
+            'LOVE15': 15,
+            'WELCOME5': 5
+        };
+
+        if (discounts[code]) {
+            appliedCouponCode = code;
+            hint.textContent = 'Coupon applied: ' + code + ' (' + discounts[code] + '% OFF)';
+            hint.style.color = '#16a34a';
+        } else {
+            appliedCouponCode = '';
+            hint.textContent = 'Invalid coupon. Try FLOWER10, LOVE15, WELCOME5';
+            hint.style.color = '#dc2626';
+        }
+    }
+
     function selectPayment(card) {
         document.querySelectorAll('.payment-method-card').forEach(function(c) {
             c.classList.remove('pm-selected');
@@ -483,6 +703,7 @@ require_once 'products/includes/seo.php';
         document.getElementById('detail-' + method).style.display = 'flex';
         document.getElementById('trxid-row').style.display = 'block';
     }
+
     function handleCheckoutSubmit(e) {
         e.preventDefault();
         var method = document.getElementById('selected-payment').value;
@@ -494,7 +715,6 @@ require_once 'products/includes/seo.php';
         btn.disabled = true;
         btn.classList.add('loading');
 
-        // Countdown display
         var count = 3;
         btn.textContent = '⏳ Processing... (' + count + ')';
         var ticker = setInterval(function() {
@@ -508,13 +728,20 @@ require_once 'products/includes/seo.php';
         }, 1000);
 
         var fd = new FormData();
-        fd.append('product_id',     '<?php echo (int)($product['id'] ?? 0); ?>');
-        fd.append('plan',           '<?php echo htmlspecialchars($selectedPlan); ?>');
-        fd.append('name',           document.getElementById('customer-name').value);
-        fd.append('phone',          document.getElementById('customer-phone').value);
-        fd.append('address',        document.getElementById('customer-email').value);
+        fd.append('product_id', '<?php echo (int)($product['id'] ?? 0); ?>');
+        fd.append('plan', '<?php echo htmlspecialchars($selectedPlan); ?>');
+        fd.append('name', document.getElementById('customer-name').value);
+        fd.append('phone', document.getElementById('customer-phone').value);
+        fd.append('address', document.getElementById('customer-email').value);
+        fd.append('delivery_date', document.getElementById('delivery-date').value);
+        fd.append('delivery_window', document.getElementById('delivery-window').value);
+        fd.append('occasion', document.getElementById('occasion-template').value);
+        fd.append('bouquet_color', document.getElementById('bouquet-color').value);
+        fd.append('bouquet_theme', document.getElementById('bouquet-theme').value);
+        fd.append('card_message', document.getElementById('card-message').value);
+        fd.append('coupon_code', appliedCouponCode);
         fd.append('payment_method', method);
-        fd.append('trx_id',         trx);
+        fd.append('trx_id', trx);
 
         var startTime = Date.now();
 
@@ -525,11 +752,12 @@ require_once 'products/includes/seo.php';
         })
         .then(function(r){ return r.json(); })
         .then(function(res){
-            var elapsed   = Date.now() - startTime;
+            var elapsed = Date.now() - startTime;
             var remaining = Math.max(0, 3000 - elapsed);
             setTimeout(function() {
                 clearInterval(ticker);
                 if (res.success) {
+                    checkoutAbandonedSent = true;
                     document.getElementById('checkout-form').style.display = 'none';
                     document.getElementById('order-success-msg').style.display = 'block';
                     document.getElementById('order-number-display').textContent = res.order_number;
@@ -550,6 +778,45 @@ require_once 'products/includes/seo.php';
         });
         return false;
     }
+
+    function captureAbandonedCheckout() {
+        if (checkoutAbandonedSent) {
+            return;
+        }
+
+        var email = (document.getElementById('customer-email') || {}).value || '';
+        var phone = (document.getElementById('customer-phone') || {}).value || '';
+        var name = (document.getElementById('customer-name') || {}).value || '';
+        if (!email || !phone || !name) {
+            return;
+        }
+
+        var payload = {
+            product_id: '<?php echo (int)($product['id'] ?? 0); ?>',
+            plan: '<?php echo htmlspecialchars($selectedPlan); ?>',
+            email: email,
+            phone: phone,
+            name: name,
+            coupon_code: appliedCouponCode,
+            total_hint: '<?php echo number_format((float)($checkoutPrice ?? 0), 2, '.', ''); ?>'
+        };
+
+        if (navigator.sendBeacon) {
+            var blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+            navigator.sendBeacon('abandoned-cart-capture.php', blob);
+        } else {
+            fetch('abandoned-cart-capture.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+                keepalive: true
+            });
+        }
+
+        checkoutAbandonedSent = true;
+    }
+
+    window.addEventListener('beforeunload', captureAbandonedCheckout);
     </script>
 </body>
 </html>

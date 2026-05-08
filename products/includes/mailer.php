@@ -106,3 +106,75 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
     fclose($socket);
     return true;
 }
+
+function ensureEmailQueueTable($conn) {
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS email_queue (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            to_email VARCHAR(255) NOT NULL,
+            subject VARCHAR(255) NOT NULL,
+            body MEDIUMTEXT NOT NULL,
+            attempts INT DEFAULT 0,
+            status ENUM('pending','sending','sent','failed') DEFAULT 'pending',
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            sent_at TIMESTAMP NULL DEFAULT NULL,
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+}
+
+function enqueueEmail($conn, $to, $subject, $body) {
+    $to = trim((string) $to);
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+
+    ensureEmailQueueTable($conn);
+    $stmt = $conn->prepare('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, "pending")');
+    $stmt->bind_param('sss', $to, $subject, $body);
+    $ok = $stmt->execute();
+    $stmt->close();
+    return $ok;
+}
+
+function processEmailQueue($conn, $limit = 20) {
+    ensureEmailQueueTable($conn);
+
+    $items = array();
+    $sql = 'SELECT id, to_email, subject, body, attempts FROM email_queue WHERE status IN ("pending", "failed") AND attempts < 5 ORDER BY id ASC LIMIT ' . (int) $limit;
+    $res = $conn->query($sql);
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $items[] = $row;
+        }
+    }
+
+    $sent = 0;
+    foreach ($items as $item) {
+        $id = (int) $item['id'];
+
+        $markSending = $conn->prepare('UPDATE email_queue SET status = "sending", attempts = attempts + 1 WHERE id = ?');
+        $markSending->bind_param('i', $id);
+        $markSending->execute();
+        $markSending->close();
+
+        $ok = smtpSendMail((string) $item['to_email'], (string) $item['subject'], (string) $item['body']);
+        if ($ok) {
+            $sent++;
+            $done = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW(), last_error = NULL WHERE id = ?');
+            $done->bind_param('i', $id);
+            $done->execute();
+            $done->close();
+        } else {
+            $err = 'SMTP send failed';
+            $fail = $conn->prepare('UPDATE email_queue SET status = "failed", last_error = ? WHERE id = ?');
+            $fail->bind_param('si', $err, $id);
+            $fail->execute();
+            $fail->close();
+        }
+    }
+
+    return array('queued' => count($items), 'sent' => $sent);
+}

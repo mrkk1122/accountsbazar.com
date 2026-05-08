@@ -6,6 +6,7 @@
 require_once '../config/config.php';
 require_once '../includes/db.php';
 require_once '../includes/functions.php';
+require_once '../includes/webpush.php';
 
 header('Content-Type: application/json');
 
@@ -111,13 +112,26 @@ try {
                       '" . $conn->real_escape_string($image) . "')";
     
     if ($conn->query($query) === TRUE) {
+        $newProductId = (int) $conn->insert_id;
+
         $mailSubject = 'New Product Added - Accounts Bazar';
         $mailMessage = "A new product has been added on the home/shop page:\r\n\r\n";
         $mailMessage .= "Product: " . $name . "\r\n";
         $mailMessage .= "Price: BDT " . number_format($price, 2);
         sendAnnouncementToUsers($conn, $mailSubject, $mailMessage);
 
-        echo json_encode(array('success' => true, 'message' => 'Product added successfully', 'id' => $conn->insert_id));
+        // True web-push broadcast queue + dispatch
+        webpushEnsureTables($conn);
+        webpushQueueEvent(
+            $conn,
+            'product-' . $newProductId,
+            'New Flower Product Added',
+            (string) $name,
+            'product-details.php?id=' . $newProductId
+        );
+        webpushSendPendingEvents($conn, 10);
+
+        echo json_encode(array('success' => true, 'message' => 'Product added successfully', 'id' => $newProductId));
     } else {
         echo json_encode(array('success' => false, 'message' => 'Error: ' . $conn->error));
     }
