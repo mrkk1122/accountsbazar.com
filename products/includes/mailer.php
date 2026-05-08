@@ -45,7 +45,7 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
         return false;
     }
     if (trim((string) MAIL_SMTP_USERNAME) === '' || trim((string) MAIL_SMTP_PASSWORD) === '') {
-        error_log('[smtpSendMail] Missing SMTP credentials: set MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.');
+        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants (typically sourced from MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD environment variables).');
         return false;
     }
 
