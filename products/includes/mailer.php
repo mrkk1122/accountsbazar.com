@@ -52,7 +52,7 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
         $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
     }
     if (!empty($missingCredentials)) {
-        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '.');
+        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '. Set environment variables MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.');
         return false;
     }
 
