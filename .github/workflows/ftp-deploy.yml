@@ -35,6 +35,10 @@ jobs:
           dangerous-clean-slate: false
           log-level: minimal
           exclude: |
+            .git*
+            .github/**
+            .env*
+            node_modules/**
             **/.git*
             **/.github/**
             **/.env*

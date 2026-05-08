@@ -5,7 +5,7 @@ This repository currently deploys files to cPanel hosting using GitHub Actions F
 ## 1) Create database in cPanel
 
 1. Open **cPanel → MySQL Databases**.
-2. Create a database (example: `accountsbazar_prod`).
+2. Create a database (example: `accountsbazar_db`).
 3. Create a database user.
 4. Add the user to the database with **ALL PRIVILEGES**.
 
