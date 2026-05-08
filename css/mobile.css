@@ -101,17 +101,17 @@
 }
 
 .notif-item.unread {
-    background: #0f1f3c;
-    border-bottom-color: rgba(212, 160, 23, 0.28);
+    background: #fee2e2;
+    border-bottom-color: #fecaca;
 }
 
 .notif-item.unread .notif-title,
 .notif-item.unread .notif-message {
-    color: #f8fafc;
+    color: #7f1d1d;
 }
 
 .notif-item.unread .notif-time {
-    color: #cbd5e1;
+    color: #991b1b;
 }
 
 .notif-title {
