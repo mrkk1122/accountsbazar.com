@@ -44,8 +44,15 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
     if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
         return false;
     }
-    if (trim((string) MAIL_SMTP_USERNAME) === '' || trim((string) MAIL_SMTP_PASSWORD) === '') {
-        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants (typically sourced from MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD environment variables).');
+    $missingCredentials = array();
+    if (trim((string) MAIL_SMTP_USERNAME) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_USERNAME';
+    }
+    if (trim((string) MAIL_SMTP_PASSWORD) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
+    }
+    if (!empty($missingCredentials)) {
+        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '.');
         return false;
     }
 
