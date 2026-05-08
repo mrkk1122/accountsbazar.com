@@ -47,8 +47,30 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO) {
 
     $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
     $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
-    $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT);
+
+    $sslContext = stream_context_create(array(
+        'ssl' => array(
+            'verify_peer'       => true,
+            'verify_peer_name'  => true,
+            'allow_self_signed' => false,
+        )
+    ));
+    $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslContext);
     if (!$socket) {
+        // Retry with relaxed SSL verification for shared hosting compatibility
+        // (e.g. self-signed or untrusted certs on cPanel mail servers)
+        error_log('[smtpSendMail] SSL connect failed (' . $errno . ': ' . $errstr . '), retrying with relaxed verification to ' . $remoteSocket);
+        $sslContextRelaxed = stream_context_create(array(
+            'ssl' => array(
+                'verify_peer'       => false,
+                'verify_peer_name'  => false,
+                'allow_self_signed' => true,
+            )
+        ));
+        $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslContextRelaxed);
+    }
+    if (!$socket) {
+        error_log('[smtpSendMail] Could not connect to ' . $remoteSocket . ' (' . $errno . ': ' . $errstr . ')');
         return false;
     }
 

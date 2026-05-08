@@ -99,13 +99,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
                     $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
 
+                    // Try direct SMTP send first for immediate OTP delivery
+                    $smtpSent = smtpSendMail($email, $subject, $body);
+
+                    // Always queue as backup for cron-based retry
                     $mailQueued = enqueueEmail($conn, $email, $subject, $body);
-                    // Best effort immediate flush for OTP UX
-                    processEmailQueue($conn, 3);
+                    if ($smtpSent && $mailQueued) {
+                        // Mark as sent in the queue so cron does not resend
+                        $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
+                        $markSentStmt->bind_param('s', $email);
+                        $markSentStmt->execute();
+                        $markSentStmt->close();
+                    }
                     $db->closeConnection();
 
-                    if (!$mailQueued) {
-                        $error = 'Could not queue OTP email. Please try again or contact support.';
+                    if (!$smtpSent && !$mailQueued) {
+                        $error = 'Could not send OTP email. Please try again or contact support.';
                     } else {
                         $_SESSION['fp_step']   = 'otp';
                         $_SESSION['fp_email']  = $email;
@@ -115,7 +124,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     }
                 }
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            error_log('[ForgotPassword/send_otp] ' . $e->getMessage());
             $error = 'Something went wrong. Please try again.';
         }
     }
@@ -149,7 +159,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                 $_SESSION['fp_otp_ok'] = true;
                 $step = 'reset';
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            error_log('[ForgotPassword/verify_otp] ' . $e->getMessage());
             $error = 'Something went wrong. Please try again.';
         }
     }
@@ -201,7 +212,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             } else {
                 $error = 'Could not update password. Please try again.';
             }
-        } catch (Exception $e) {
+        } catch (Throwable $e) {
+            error_log('[ForgotPassword/reset_password] ' . $e->getMessage());
             $error = 'Something went wrong. Please try again.';
         }
     }
