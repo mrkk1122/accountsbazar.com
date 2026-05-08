@@ -36,7 +36,16 @@ Set these in **GitHub → Settings → Secrets and variables → Actions**:
 - `FTP_USERNAME`
 - `FTP_PASSWORD`
 
-## 5) Test DB connection after deploy
+## 5) Mail environment variables (recommended)
+
+Set these server-side environment variables for SMTP:
+
+- `MAIL_SMTP_USERNAME` (for this mailbox: `needhelp@accountsbazar.com`)
+- `MAIL_SMTP_PASSWORD` (mailbox password, do not commit in code)
+- `MAIL_FROM_ADDRESS` (recommended: `needhelp@accountsbazar.com`)
+- `MAIL_REPLY_TO` (optional; defaults to `MAIL_FROM_ADDRESS`)
+
+## 6) Test DB connection after deploy
 
 1. Deploy from `main` (or run workflow manually).
 2. Open the hosted app.
