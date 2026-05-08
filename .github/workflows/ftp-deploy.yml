@@ -39,7 +39,3 @@ jobs:
             .github/**
             .env*
             node_modules/**
-            **/.git*
-            **/.github/**
-            **/.env*
-            **/node_modules/**
