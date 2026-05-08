@@ -64,6 +64,10 @@ self.addEventListener('push', function(event) {
     icon: data.icon || 'images/logo.png',
     badge: data.badge || 'favicon.png',
     tag: data.tag || 'ab-general',
+    renotify: true,
+    vibrate: [200, 100, 200],
+    requireInteraction: false,
+    silent: false,
     data: {
       url: data.url || 'index.php'
     }
