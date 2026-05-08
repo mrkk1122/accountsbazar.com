@@ -60,18 +60,18 @@ $initial     = strtoupper(substr($displayName, 0, 1));
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <link rel="icon" href="favicon.svg?v=20260429f" type="image/svg+xml">
-    <link rel="shortcut icon" href="favicon.png?v=20260429f" type="image/png">
-    <link rel="apple-touch-icon" href="images/logo.png">
-    <title>My Profile - Accounts Bazar</title>
-    <meta name="description" content="Manage your Accounts Bazar profile, orders, and account information.">
-    <meta name="robots" content="noindex, nofollow">
-    <link rel="canonical" href="https://accountsbazar.com/profile.php">
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="My Profile - Accounts Bazar">
-    <meta property="og:description" content="Track your orders and view profile details in Accounts Bazar.">
-    <meta property="og:url" content="https://accountsbazar.com/profile.php">
+<?php
+$seo = [
+    'title'       => 'My Profile - Accounts Bazar',
+    'description' => 'Manage your Accounts Bazar profile, orders, and account information.',
+    'keywords'    => 'accounts bazar profile, user dashboard, order history',
+    'canonical'   => 'https://accountsbazar.com/profile.php',
+    'og_image'    => 'https://accountsbazar.com/images/logo.png',
+    'og_type'     => 'profile',
+    'noindex'     => true,
+];
+require_once 'products/includes/seo.php';
+?>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/mobile.css">
     <style>

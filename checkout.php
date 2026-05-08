@@ -211,18 +211,18 @@ if ($productId > 0) {
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <link rel="icon" href="favicon.svg?v=20260429f" type="image/svg+xml">
-    <link rel="shortcut icon" href="favicon.png?v=20260429f" type="image/png">
-    <link rel="apple-touch-icon" href="images/logo.png">
-    <title>Checkout - Accounts Bazar</title>
-    <meta name="description" content="Secure checkout page for completing your Accounts Bazar order.">
-    <meta name="robots" content="noindex, nofollow">
-    <link rel="canonical" href="https://accountsbazar.com/checkout.php">
-    <meta property="og:type" content="website">
-    <meta property="og:title" content="Checkout - Accounts Bazar">
-    <meta property="og:description" content="Complete your order securely at Accounts Bazar checkout.">
-    <meta property="og:url" content="https://accountsbazar.com/checkout.php">
+<?php
+$seo = [
+    'title'       => 'Checkout - Accounts Bazar',
+    'description' => 'Secure checkout page for completing your Accounts Bazar order.',
+    'keywords'    => 'accounts bazar checkout, secure digital account payment, bkash nagad rocket payment',
+    'canonical'   => 'https://accountsbazar.com/checkout.php',
+    'og_image'    => 'https://accountsbazar.com/images/logo.png',
+    'og_type'     => 'website',
+    'noindex'     => true,
+];
+require_once 'products/includes/seo.php';
+?>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/mobile.css">
 </head>

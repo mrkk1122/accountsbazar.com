@@ -92,26 +92,90 @@ $seoDescription = $product
     ? mb_substr(trim((string) ($product['description'] ?? 'Premium product details at Accounts Bazar.')), 0, 155)
     : 'View premium product details, plans, reviews, and checkout options at Accounts Bazar.';
 $seoCanonical = 'https://accountsbazar.com/product-details.php' . ($productId > 0 ? '?id=' . (int) $productId : '');
+$seoKeywords = $product
+    ? strtolower(trim((string) ($product['name'] ?? ''))) . ', buy digital account bangladesh, premium subscription, accounts bazar'
+    : 'product details, premium accounts, digital subscriptions, accounts bazar';
+
+$seoImage = 'https://accountsbazar.com/images/logo.png';
+if ($product && !empty($product['image'])) {
+    $rawImages = (string) ($product['image'] ?? '');
+    $imageList = array_values(array_filter(array_map('trim', explode(',', $rawImages))));
+    $primaryImage = (string) ($imageList[0] ?? $rawImages);
+    if ($primaryImage !== '') {
+        $normalizedImage = ltrim($primaryImage, '/');
+        if (strpos($normalizedImage, 'images/') === 0) {
+            $normalizedImage = 'products/' . $normalizedImage;
+        }
+        if (preg_match('/^https?:\/\//i', $normalizedImage)) {
+            $seoImage = $normalizedImage;
+        } else {
+            $seoImage = 'https://accountsbazar.com/' . $normalizedImage;
+        }
+    }
+}
+
+$reviewCount = count($reviews);
+$ratingValue = 5;
+if ($reviewCount > 0) {
+    $sum = 0;
+    foreach ($reviews as $item) {
+        $sum += max(1, min(5, (int) ($item['rating'] ?? 5)));
+    }
+    $ratingValue = round($sum / $reviewCount, 1);
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">    <link rel="icon" href="favicon.svg?v=20260429f" type="image/svg+xml">
-    <link rel="shortcut icon" href="favicon.png?v=20260429f" type="image/png">
-    <link rel="apple-touch-icon" href="images/logo.png">
-    <title><?php echo $seoTitle; ?></title>
-    <meta name="description" content="<?php echo htmlspecialchars($seoDescription); ?>">
-    <meta name="robots" content="index, follow">
-    <link rel="canonical" href="<?php echo htmlspecialchars($seoCanonical); ?>">
-    <meta property="og:type" content="product">
-    <meta property="og:title" content="<?php echo $seoTitle; ?>">
-    <meta property="og:description" content="<?php echo htmlspecialchars($seoDescription); ?>">
-    <meta property="og:url" content="<?php echo htmlspecialchars($seoCanonical); ?>">
-    <meta property="og:image" content="https://accountsbazar.com/images/logo.png">
-    <meta name="twitter:card" content="summary_large_image">
+<?php
+$seo = [
+    'title'       => html_entity_decode($seoTitle, ENT_QUOTES, 'UTF-8'),
+    'description' => $seoDescription,
+    'keywords'    => $seoKeywords,
+    'canonical'   => $seoCanonical,
+    'og_image'    => $seoImage,
+    'og_type'     => 'product',
+];
+require_once 'products/includes/seo.php';
+?>
     <link rel="stylesheet" href="css/style.css">
     <link rel="stylesheet" href="css/mobile.css">
+    <?php if ($product): ?>
+    <script type="application/ld+json">
+    <?php
+    $productSchema = [
+        '@context' => 'https://schema.org',
+        '@type' => 'Product',
+        'name' => (string) ($product['name'] ?? ''),
+        'description' => (string) ($seoDescription ?? ''),
+        'image' => [$seoImage],
+        'sku' => (string) ($product['id'] ?? ''),
+        'brand' => [
+            '@type' => 'Brand',
+            'name' => 'Accounts Bazar',
+        ],
+        'offers' => [
+            '@type' => 'Offer',
+            'url' => $seoCanonical,
+            'priceCurrency' => 'BDT',
+            'price' => number_format((float) ($product['price'] ?? 0), 2, '.', ''),
+            'availability' => ((int) ($product['quantity'] ?? 0) > 0)
+                ? 'https://schema.org/InStock'
+                : 'https://schema.org/OutOfStock',
+            'itemCondition' => 'https://schema.org/NewCondition',
+        ],
+    ];
+    if ($reviewCount > 0) {
+        $productSchema['aggregateRating'] = [
+            '@type' => 'AggregateRating',
+            'ratingValue' => $ratingValue,
+            'reviewCount' => $reviewCount,
+        ];
+    }
+    echo json_encode($productSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    ?>
+    </script>
+    <?php endif; ?>
 </head>
 <body>
     <header class="header">

@@ -358,7 +358,10 @@ require_once 'products/includes/seo.php';
                     >
                 </div>
                 <div class="lf-row">
-                    <label for="login-password">Password</label>
+                    <label for="login-password" style="display:flex;justify-content:space-between;align-items:center;">
+                        <span>Password</span>
+                        <a href="forgot-password.php" style="font-size:12px;font-weight:600;color:#0ea5e9;text-decoration:none;" tabindex="-1">Forgot password?</a>
+                    </label>
                     <div class="pw-wrap">
                         <input
                             id="login-password"
