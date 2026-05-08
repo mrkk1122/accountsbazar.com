@@ -4,10 +4,13 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 jobs:
   ftp-deploy:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
 
     steps:
       - name: Checkout repository
@@ -23,14 +26,7 @@ jobs:
           protocol: ftp
           port: 21
 
-          # 🔥 IMPORTANT (correct hosting root)
           server-dir: /public_html/
-
-          # repo root only
           local-dir: ./
-
-          # 🔥 IMPORTANT FIX for FIN/connection drop
           dangerous-clean-slate: false
-
-          # reduce server stress
           log-level: minimal
