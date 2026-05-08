@@ -42,9 +42,10 @@ jobs:
           server-dir: /public_html/
           local-dir: ./
           dangerous-clean-slate: false
-          log-level: verbose
+          log-level: minimal
           exclude: |
-            .git*
-            .github/**
+            **/.git/**
+            **/.github/**
+            .gitignore
             .env*
             node_modules/**
