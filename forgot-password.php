@@ -95,6 +95,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $delStmt->bind_param('s', $email);
                         $delStmt->execute();
                         $delStmt->close();
+                    } else {
+                        error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
                     }
 
                     // Generate 6-digit OTP

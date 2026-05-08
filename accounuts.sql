@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS `password_resets` (
 
 -- ── Email Queue (cron-based delivery fallback) ───────────────────────────────
 CREATE TABLE IF NOT EXISTS `email_queue` (
-    `id`         INT AUTO_INCREMENT PRIMARY KEY,
+    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `to_email`   VARCHAR(255) NOT NULL,
     `subject`    VARCHAR(255) NOT NULL,
     `body`       MEDIUMTEXT   NOT NULL,
