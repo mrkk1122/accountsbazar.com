@@ -504,8 +504,9 @@ function initNotificationCenter() {
             const message = (item.message || '').toString();
             const url = (item.url || '#').toString();
             const time = (item.created_at || '').toString();
+            const uid = (item.uid || '').toString();
             return '' +
-                '<a class="notif-item' + (unread ? ' unread' : '') + '" href="' + url + '">' +
+                '<a class="notif-item' + (unread ? ' unread' : '') + '" href="' + url + '" data-notif-uid="' + uid + '">' +
                     '<div class="notif-title">' + title + '</div>' +
                     '<div class="notif-message">' + message + '</div>' +
                     '<div class="notif-time">' + time + '</div>' +
@@ -516,6 +517,11 @@ function initNotificationCenter() {
 
         listEl.querySelectorAll('.notif-item').forEach(function(link) {
             link.addEventListener('click', function() {
+                const uid = (link.getAttribute('data-notif-uid') || '').trim();
+                if (uid) {
+                    markSeen(uid);
+                    updateUnreadState();
+                }
                 panel.classList.remove('open');
             });
         });
@@ -531,17 +537,27 @@ function initNotificationCenter() {
         }
     }
 
-    function markAllSeen(items) {
+    function markSeen(uid) {
+        if (!uid) {
+            return;
+        }
+
         const seenMap = getSeenMap();
-        items.forEach(function(item) {
-            if (item && item.uid) {
-                seenMap[item.uid] = 1;
-            }
-        });
+        seenMap[uid] = 1;
         setSeenMap(seenMap);
     }
 
     let latestItems = [];
+
+    function updateUnreadState() {
+        const seenMap = getSeenMap();
+        const unreadCount = latestItems.filter(function(item) {
+            return item && item.uid && !seenMap[item.uid];
+        }).length;
+
+        updateBadge(unreadCount);
+        renderItems(latestItems, seenMap);
+    }
 
     function loadNotifications() {
         fetch('notifications-feed.php', { cache: 'no-store' })
@@ -552,10 +568,6 @@ function initNotificationCenter() {
                 }
 
                 latestItems = data.items;
-                const seenMap = getSeenMap();
-                const unreadCount = latestItems.filter(function(item) {
-                    return item && item.uid && !seenMap[item.uid];
-                }).length;
 
                 const bootstrapKey = 'ab_notif_push_bootstrap_done';
                 const pushedMap = getPushedMap();
@@ -586,8 +598,7 @@ function initNotificationCenter() {
                     });
                 }
 
-                updateBadge(unreadCount);
-                renderItems(latestItems, seenMap);
+                updateUnreadState();
             })
             .catch(function() {
                 listEl.innerHTML = '<div class="notif-empty">Notification unavailable.</div>';
@@ -598,8 +609,6 @@ function initNotificationCenter() {
         event.preventDefault();
         panel.classList.toggle('open');
         if (panel.classList.contains('open')) {
-            markAllSeen(latestItems);
-            updateBadge(0);
             renderItems(latestItems, getSeenMap());
         }
     });
