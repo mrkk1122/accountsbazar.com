@@ -14,7 +14,7 @@ function queueLatestEvents($conn) {
         while ($row = $productRes->fetch_assoc()) {
             $items[] = array(
                 'uid' => 'product-' . (int) $row['id'],
-                'title' => 'New Flower Product Added',
+                'title' => 'New Product Added',
                 'message' => (string) ($row['name'] ?? ''),
                 'url' => 'product-details.php?id=' . (int) $row['id'],
             );
@@ -32,7 +32,7 @@ function queueLatestEvents($conn) {
                 }
                 $items[] = array(
                     'uid' => 'prompt-' . (int) $row['id'],
-                    'title' => 'New Occasion Prompt',
+                    'title' => 'New AI Prompt Added',
                     'message' => $text,
                     'url' => 'ai-prompt.php#prompt-' . (int) $row['id'],
                 );

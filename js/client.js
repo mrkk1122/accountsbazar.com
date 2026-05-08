@@ -395,8 +395,8 @@ function initNotificationCenter() {
         });
     }
 
-    function ensureHomeNotificationPermission() {
-        if (!isHomePage() || !('Notification' in window)) {
+    function ensureNotificationPermission() {
+        if (!('Notification' in window)) {
             return;
         }
 
@@ -615,7 +615,7 @@ function initNotificationCenter() {
     });
 
     loadNotifications();
-    ensureHomeNotificationPermission();
+    ensureNotificationPermission();
     setInterval(loadNotifications, 10000);
 }
 
