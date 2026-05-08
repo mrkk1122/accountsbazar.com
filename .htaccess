@@ -1,0 +1,131 @@
+# ================================================================
+#  Accounts Bazar – Apache .htaccess (Production Ready)
+# ================================================================
+
+Options -Indexes
+ServerSignature Off
+
+# ── PHP Runtime Limits ──────────────────────────────────────────
+# LiteSpeed processes php_value natively in .htaccess (no IfModule needed).
+php_value upload_max_filesize 128M
+php_value post_max_size       140M
+php_value memory_limit        256M
+php_value max_file_uploads    50
+php_value max_execution_time  180
+
+# ── HTTPS Redirect ───────────────────────────────────────────────
+RewriteEngine On
+# Skip production redirects on local development hosts
+RewriteCond %{HTTP_HOST} ^(localhost|127\.0\.0\.1)(:\d+)?$ [NC]
+RewriteRule ^ - [L]
+
+RewriteCond %{HTTPS} off
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Browser fallback for favicon request
+RewriteRule ^favicon\.ico$ /favicon.png [L,R=302]
+
+# ── www → non-www (edit to suit your preference) ─────────────────
+RewriteCond %{HTTP_HOST} ^www\.accountsbazar\.com [NC]
+RewriteRule ^ https://accountsbazar.com%{REQUEST_URI} [L,R=301]
+
+# ── Pretty Root URL: / → index.php ───────────────────────────────
+RewriteRule ^$ index.php [L]
+
+# Admin dashboard fallback if admin/index.php becomes corrupted on hosting
+RewriteRule ^admin/index\.php$ admin/dashboard.php [L,QSA]
+
+# ── Block access to sensitive files ──────────────────────────────
+<FilesMatch "\.(sql|log|env|ini|sh|bat|txt|md|htpasswd|bak)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order Allow,Deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
+
+# Allow robots.txt and sitemap.xml explicitly
+<Files "robots.txt">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
+</Files>
+<Files "sitemap.xml">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
+</Files>
+<Files "manifest.json">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
+</Files>
+<Files "favicon.png">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
+</Files>
+<Files "favicon.ico">
+    <IfModule mod_authz_core.c>
+        Require all granted
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Allow from all
+    </IfModule>
+</Files>
+
+# ── Block direct access to PHP includes & config ─────────────────
+<IfModule mod_rewrite.c>
+    RewriteRule ^products/config/ - [F,L]
+    RewriteRule ^products/includes/ - [F,L]
+</IfModule>
+
+# ── Security Headers ─────────────────────────────────────────────
+<IfModule mod_headers.c>
+    Header always set X-Frame-Options "SAMEORIGIN"
+    Header always set X-Content-Type-Options "nosniff"
+    Header always set X-XSS-Protection "1; mode=block"
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+    Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
+    Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+</IfModule>
+
+# ── Gzip Compression ─────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html text/plain text/xml text/css
+    AddOutputFilterByType DEFLATE text/javascript application/javascript application/json
+    AddOutputFilterByType DEFLATE image/svg+xml application/xml
+</IfModule>
+
+# ── Browser Caching ──────────────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css              "access plus 1 month"
+    ExpiresByType text/javascript       "access plus 1 month"
+    ExpiresByType application/javascript "access plus 1 month"
+    ExpiresByType image/jpeg            "access plus 3 months"
+    ExpiresByType image/png             "access plus 3 months"
+    ExpiresByType image/webp            "access plus 3 months"
+    ExpiresByType image/gif             "access plus 3 months"
+    ExpiresByType image/svg+xml        "access plus 3 months"
+    ExpiresByType application/json     "access plus 1 day"
+    ExpiresByType text/html            "access plus 0 seconds"
+</IfModule>
+
+# ── 404 Custom Error Page ────────────────────────────────────────
+ErrorDocument 404 /index.php
+ErrorDocument 403 /index.php

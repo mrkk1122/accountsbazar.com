@@ -1,0 +1,33 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Accounts Bazar - Sale">
+  <defs>
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff4e0"/>
+      <stop offset="1" stop-color="#fde8c8"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background circle -->
+  <circle cx="32" cy="32" r="32" fill="url(#bgGrad)"/>
+
+  <!-- Blue bag (back-right) -->
+  <rect x="34" y="26" width="18" height="22" rx="2" fill="#29aadf"/>
+  <path d="M38 26 Q38 20 43 20 Q48 20 48 26" fill="none" stroke="#1a7fb5" stroke-width="2" stroke-linecap="round"/>
+  <!-- Blue bag handle dots -->
+  <circle cx="38" cy="26" r="1.5" fill="#1a7fb5"/>
+  <circle cx="48" cy="26" r="1.5" fill="#1a7fb5"/>
+
+  <!-- Yellow bag (back-left) -->
+  <rect x="12" y="24" width="18" height="22" rx="2" fill="#f5c518"/>
+  <path d="M16 24 Q16 18 21 18 Q26 18 26 24" fill="none" stroke="#c9a000" stroke-width="2" stroke-linecap="round"/>
+  <circle cx="16" cy="24" r="1.5" fill="#c9a000"/>
+  <circle cx="26" cy="24" r="1.5" fill="#c9a000"/>
+
+  <!-- Red bag (front-center) -->
+  <rect x="20" y="22" width="24" height="28" rx="3" fill="#e53935"/>
+  <path d="M25 22 Q25 15 32 15 Q39 15 39 22" fill="none" stroke="#9b1e1e" stroke-width="2.5" stroke-linecap="round"/>
+  <circle cx="25" cy="22" r="2" fill="#9b1e1e"/>
+  <circle cx="39" cy="22" r="2" fill="#9b1e1e"/>
+
+  <!-- SALE text on red bag -->
+  <text x="32" y="40" font-family="Arial,sans-serif" font-size="8" font-weight="900" fill="#ffffff" text-anchor="middle" letter-spacing="0.5">SALE</text>
+</svg>
