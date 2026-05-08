@@ -76,8 +76,8 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         return false;
     }
     $missingCredentials = array();
-    $smtpUsername = MAIL_SMTP_USERNAME;
-    $smtpPassword = MAIL_SMTP_PASSWORD;
+    $smtpUsername = is_string($username) ? trim($username) : '';
+    $smtpPassword = is_string($password) ? trim($password) : '';
     if (!is_string($smtpUsername) || trim($smtpUsername) === '') {
         $missingCredentials[] = 'MAIL_SMTP_USERNAME';
     }
@@ -163,8 +163,8 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         }
 
         if (!smtpSendCommand($socket, 'AUTH LOGIN', array(334))
-            || !smtpSendCommand($socket, base64_encode($username), array(334))
-            || !smtpSendCommand($socket, base64_encode($password), array(235))) {
+            || !smtpSendCommand($socket, base64_encode($smtpUsername), array(334))
+            || !smtpSendCommand($socket, base64_encode($smtpPassword), array(235))) {
             fclose($socket);
             if ($attempts >= $maxAttempts) {
                 logMailActivity($to, $subject, 'FAILED', 'Authentication failed');

@@ -53,6 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
             // Check user exists
             $userStmt = $conn->prepare('SELECT id, email, is_active FROM users WHERE email = ? LIMIT 1');
+            if (!$userStmt) {
+                throw new RuntimeException('DB prepare failed (find user): ' . $conn->error);
+            }
             $userStmt->bind_param('s', $email);
             $userStmt->execute();
             $userRow = $userStmt->get_result()->fetch_assoc();
@@ -111,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $insStmt->execute();
                     $insStmt->close();
 
-                    // Queue OTP email
+                    // Build OTP email
                     $subject  = 'Accounts Bazar – Password Reset OTP';
                     $body  = "Hello,\r\n\r\n";
                     $body .= "We received a request to reset the password for your Accounts Bazar account.\r\n\r\n";
@@ -121,11 +124,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
                     $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
 
-                    // Try direct SMTP send first for immediate OTP delivery
-                    $smtpSent = smtpSendMail($email, $subject, $body);
+                    $htmlBody = getEmailTemplate(
+                        'Password Reset OTP',
+                        '<p>Hello,</p><p>We received a password reset request for your account.</p><p><strong>Your OTP: ' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '</strong></p><p>This OTP is valid for 15 minutes. Do not share it with anyone.</p>'
+                    );
+
+                    // Try direct SMTP send first for immediate OTP delivery.
+                    $smtpSent = smtpSendMail($email, $subject, $htmlBody);
 
                     // Always queue as backup for cron-based retry
-                    $mailQueued = enqueueEmail($conn, $email, $subject, $body);
+                    $mailQueued = enqueueEmail($conn, $email, $subject, $htmlBody);
+
+                    // Process a few queued jobs immediately so OTP can arrive
+                    // even when cron is not yet configured.
+                    $queueResult = array('queued' => 0, 'sent' => 0);
+                    if ($mailQueued) {
+                        $queueResult = processEmailQueue($conn, 3);
+                    }
+
                     if ($smtpSent && $mailQueued) {
                         // Mark as sent in the queue so cron does not resend
                         $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
@@ -137,14 +153,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     }
                     $db->closeConnection();
 
-                    if (!$smtpSent && !$mailQueued) {
+                    $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0);
+
+                    if (!$sentNow && !$mailQueued) {
                         $error = 'Could not send OTP email. Please try again or contact support.';
                     } else {
                         $_SESSION['fp_step']   = 'otp';
                         $_SESSION['fp_email']  = $email;
                         $_SESSION['fp_otp_ok'] = false;
                         $step    = 'otp';
-                        $success = 'OTP sent to ' . htmlspecialchars($email) . '. Check your inbox (and spam folder).';
+                        if ($sentNow) {
+                            $success = 'OTP sent to ' . htmlspecialchars($email) . '. Check your inbox (and spam folder).';
+                        } else {
+                            $success = 'OTP request accepted. Email is queued and will arrive shortly.';
+                        }
                     }
                 }
             }
