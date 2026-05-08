@@ -153,12 +153,21 @@ function enqueueEmail($conn, $to, $subject, $body) {
         return false;
     }
 
-    ensureEmailQueueTable($conn);
-    $stmt = $conn->prepare('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, "pending")');
-    $stmt->bind_param('sss', $to, $subject, $body);
-    $ok = $stmt->execute();
-    $stmt->close();
-    return $ok;
+    try {
+        ensureEmailQueueTable($conn);
+        $stmt = $conn->prepare('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, "pending")');
+        if (!$stmt) {
+            error_log('[enqueueEmail] prepare failed: ' . $conn->error);
+            return false;
+        }
+        $stmt->bind_param('sss', $to, $subject, $body);
+        $ok = $stmt->execute();
+        $stmt->close();
+        return $ok;
+    } catch (Throwable $e) {
+        error_log('[enqueueEmail] ' . $e->getMessage());
+        return false;
+    }
 }
 
 function processEmailQueue($conn, $limit = 20) {

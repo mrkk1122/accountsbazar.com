@@ -63,9 +63,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             } elseif ((int) ($userRow['is_active'] ?? 1) === 0) {
                 $error = 'This account is inactive. Please contact support.';
             } else {
+                // Ensure password_resets table exists before querying it
+                $conn->query(
+                    'CREATE TABLE IF NOT EXISTS `password_resets` (
+                        `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                        `email`      VARCHAR(255) NOT NULL,
+                        `otp_code`   VARCHAR(6)   NOT NULL,
+                        `expires_at` DATETIME     NOT NULL,
+                        `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                        INDEX `idx_email` (`email`)
+                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+                );
+
                 // Rate-limit: max 3 requests per 10 minutes per email
-                $rateSql = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
+                $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
                 $rateStmt = $conn->prepare($rateSql);
+                if (!$rateStmt) {
+                    throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
+                }
                 $rateStmt->bind_param('s', $email);
                 $rateStmt->execute();
                 $rateRow  = $rateStmt->get_result()->fetch_assoc();
@@ -76,15 +91,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                 } else {
                     // Delete any stale OTPs for this email
                     $delStmt = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
-                    $delStmt->bind_param('s', $email);
-                    $delStmt->execute();
-                    $delStmt->close();
+                    if ($delStmt) {
+                        $delStmt->bind_param('s', $email);
+                        $delStmt->execute();
+                        $delStmt->close();
+                    } else {
+                        error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
+                    }
 
                     // Generate 6-digit OTP
                     $otp     = (string) random_int(100000, 999999);
                     $expires = date('Y-m-d H:i:s', time() + 15 * 60); // 15 minutes
 
                     $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
+                    if (!$insStmt) {
+                        throw new RuntimeException('DB prepare failed (insert OTP): ' . $conn->error);
+                    }
                     $insStmt->bind_param('sss', $email, $otp, $expires);
                     $insStmt->execute();
                     $insStmt->close();
@@ -107,9 +129,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     if ($smtpSent && $mailQueued) {
                         // Mark as sent in the queue so cron does not resend
                         $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
-                        $markSentStmt->bind_param('s', $email);
-                        $markSentStmt->execute();
-                        $markSentStmt->close();
+                        if ($markSentStmt) {
+                            $markSentStmt->bind_param('s', $email);
+                            $markSentStmt->execute();
+                            $markSentStmt->close();
+                        }
                     }
                     $db->closeConnection();
 
@@ -146,6 +170,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             $chkStmt = $conn->prepare(
                 'SELECT id FROM password_resets WHERE email = ? AND otp_code = ? AND expires_at >= NOW() LIMIT 1'
             );
+            if (!$chkStmt) {
+                throw new RuntimeException('DB prepare failed (verify OTP): ' . $conn->error);
+            }
             $chkStmt->bind_param('ss', $email, $otp);
             $chkStmt->execute();
             $chkRow = $chkStmt->get_result()->fetch_assoc();
