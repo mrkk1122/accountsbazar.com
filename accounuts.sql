@@ -222,3 +222,29 @@ INSERT IGNORE INTO users (username, email, password, first_name, last_name, phon
 ('customer3', 'customer3@email.com', MD5('password123'), 'Mohammad', 'Hassan', '01956789012', 'Sylhet', 'Bangladesh', 'customer');
 
 SET FOREIGN_KEY_CHECKS = 1;
+
+-- ── Password Reset OTPs ──────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS `password_resets` (
+    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `email`      VARCHAR(255) NOT NULL,
+    `otp_code`   VARCHAR(6)   NOT NULL,
+    `expires_at` DATETIME     NOT NULL,
+    `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+    INDEX `idx_email` (`email`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- ── Email Queue (cron-based delivery fallback) ───────────────────────────────
+CREATE TABLE IF NOT EXISTS `email_queue` (
+    `id`         INT AUTO_INCREMENT PRIMARY KEY,
+    `to_email`   VARCHAR(255) NOT NULL,
+    `subject`    VARCHAR(255) NOT NULL,
+    `body`       MEDIUMTEXT   NOT NULL,
+    `attempts`   INT          DEFAULT 0,
+    `status`     ENUM('pending','sending','sent','failed') DEFAULT 'pending',
+    `last_error` TEXT,
+    `created_at` TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
+    `sent_at`    TIMESTAMP    NULL DEFAULT NULL,
+    INDEX `idx_status`     (`status`),
+    INDEX `idx_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
