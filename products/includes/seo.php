@@ -13,6 +13,11 @@
  * ];
  */
 
+if (file_exists(__DIR__ . '/../config/webpush.php')) {
+    require_once __DIR__ . '/../config/webpush.php';
+}
+
+
 $seo = array_merge([
     'title'       => 'Accounts Bazar – Premium Digital Accounts & Subscriptions',
     'description' => 'Accounts Bazar offers verified premium digital accounts, subscriptions, AI prompts, and instant delivery in Bangladesh.',
@@ -24,6 +29,9 @@ $seo = array_merge([
     'locale'      => 'bn_BD',
     'twitter_site'=> '@AccountsBazar',
     'noindex'     => false,
+    'breadcrumb_items' => [
+        ['name' => 'Home', 'item' => 'https://accountsbazar.com/']
+    ],
 ], $seo ?? []);
 
 $robotsContent = $seo['noindex'] ? 'noindex, nofollow' : 'index, follow, max-image-preview:large, max-snippet:-1';
@@ -38,6 +46,44 @@ $safeLocale      = htmlspecialchars($seo['locale'], ENT_QUOTES, 'UTF-8');
 $safeSiteName    = htmlspecialchars('Accounts Bazar', ENT_QUOTES, 'UTF-8');
 $safeSiteUrl     = htmlspecialchars('https://accountsbazar.com/', ENT_QUOTES, 'UTF-8');
 $safeTwitterSite = htmlspecialchars($seo['twitter_site'], ENT_QUOTES, 'UTF-8');
+$breadcrumbItems = is_array($seo['breadcrumb_items'] ?? null) ? $seo['breadcrumb_items'] : array();
+if (count($breadcrumbItems) === 0) {
+    $breadcrumbItems = array(array('name' => 'Home', 'item' => 'https://accountsbazar.com/'));
+}
+$breadcrumbList = array();
+$position = 1;
+foreach ($breadcrumbItems as $b) {
+    $name = trim((string) ($b['name'] ?? ''));
+    $item = trim((string) ($b['item'] ?? ''));
+    if ($name === '' || $item === '') {
+        continue;
+    }
+    $breadcrumbList[] = array(
+        '@type' => 'ListItem',
+        'position' => $position,
+        'name' => $name,
+        'item' => $item,
+    );
+    $position++;
+}
+if (count($breadcrumbList) === 0) {
+    $breadcrumbList[] = array(
+        '@type' => 'ListItem',
+        'position' => 1,
+        'name' => 'Home',
+        'item' => 'https://accountsbazar.com/'
+    );
+}
+
+// Auto-append current page breadcrumb when not explicitly supplied.
+if (count($breadcrumbList) === 1 && trim((string) ($seo['canonical'] ?? '')) !== 'https://accountsbazar.com/') {
+    $breadcrumbList[] = array(
+        '@type' => 'ListItem',
+        'position' => 2,
+        'name' => trim((string) ($seo['title'] ?? 'Page')),
+        'item' => trim((string) ($seo['canonical'] ?? 'https://accountsbazar.com/')),
+    );
+}
 $scriptDir = str_replace('\\', '/', dirname((string) ($_SERVER['SCRIPT_NAME'] ?? '/')));
 $assetBase = rtrim($scriptDir, '/');
 if ($assetBase === '' || $assetBase === '.') {
@@ -68,6 +114,9 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
     <meta name="rating" content="general">
     <meta name="revisit-after" content="3 days">
     <meta name="language" content="Bengali">
+    <?php if (defined('WEBPUSH_PUBLIC_KEY') && trim((string) WEBPUSH_PUBLIC_KEY) !== ''): ?>
+    <meta name="ab-webpush-public-key" content="<?php echo htmlspecialchars((string) WEBPUSH_PUBLIC_KEY, ENT_QUOTES, 'UTF-8'); ?>">
+    <?php endif; ?>
     <link rel="canonical" href="<?php echo $safeCanonical; ?>">
     <link rel="alternate" hreflang="bn-BD" href="<?php echo $safeCanonical; ?>">
     <link rel="alternate" hreflang="x-default" href="<?php echo $safeCanonical; ?>">
@@ -157,27 +206,25 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
         }
         </script>
         <script type="application/ld+json">
-        {
-            "@context": "https://schema.org",
-            "@type": "WebPage",
-            "name": "<?php echo $safeTitle; ?>",
-            "url": "<?php echo $safeCanonical; ?>",
-            "description": "<?php echo $safeDesc; ?>",
-            "inLanguage": "bn-BD",
-            "dateModified": "<?php echo gmdate('Y-m-d'); ?>",
-            "isPartOf": {
-                "@type": "WebSite",
-                "name": "<?php echo $safeSiteName; ?>",
-                "url": "<?php echo $safeSiteUrl; ?>"
-            },
-            "breadcrumb": {
-                "@type": "BreadcrumbList",
-                "itemListElement": [{
-                    "@type": "ListItem",
-                    "position": 1,
-                    "name": "Home",
-                    "item": "https://accountsbazar.com/"
-                }]
-            }
-        }
+        <?php
+        $webPageSchema = array(
+            '@context' => 'https://schema.org',
+            '@type' => 'WebPage',
+            'name' => $seo['title'],
+            'url' => $seo['canonical'],
+            'description' => $seo['description'],
+            'inLanguage' => 'bn-BD',
+            'dateModified' => gmdate('Y-m-d'),
+            'isPartOf' => array(
+                '@type' => 'WebSite',
+                'name' => 'Accounts Bazar',
+                'url' => 'https://accountsbazar.com/'
+            ),
+            'breadcrumb' => array(
+                '@type' => 'BreadcrumbList',
+                'itemListElement' => $breadcrumbList
+            )
+        );
+        echo json_encode($webPageSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        ?>
         </script>

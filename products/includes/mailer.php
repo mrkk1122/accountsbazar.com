@@ -75,9 +75,53 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         logMailActivity($to, $subject, 'FAILED', $error);
         return false;
     }
+    $missingCredentials = array();
+    $smtpUsername = MAIL_SMTP_USERNAME;
+    $smtpPassword = MAIL_SMTP_PASSWORD;
+    if (!is_string($smtpUsername) || trim($smtpUsername) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_USERNAME';
+    }
+    if (!is_string($smtpPassword) || trim($smtpPassword) === '') {
+        $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
+    }
+    if (!empty($missingCredentials)) {
+        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '. Set environment variables MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.');
+        return false;
+    }
 
+<<<<<<< HEAD
     $attempts = 0;
     $maxAttempts = MAIL_RETRY_ATTEMPTS;
+=======
+    $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
+    $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
+
+    $sslContext = stream_context_create(array(
+        'ssl' => array(
+            'verify_peer'       => true,
+            'verify_peer_name'  => true,
+            'allow_self_signed' => false,
+        )
+    ));
+    $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslContext);
+    if (!$socket) {
+        // Retry with relaxed SSL verification for shared hosting compatibility
+        // (e.g. self-signed or untrusted certs on cPanel mail servers)
+        error_log('[smtpSendMail] SSL connect failed (' . $errno . ': ' . $errstr . '), retrying with relaxed verification to ' . $remoteSocket);
+        $sslContextRelaxed = stream_context_create(array(
+            'ssl' => array(
+                'verify_peer'       => false,
+                'verify_peer_name'  => false,
+                'allow_self_signed' => true,
+            )
+        ));
+        $socket = @stream_socket_client($remoteSocket, $errno, $errstr, 30, STREAM_CLIENT_CONNECT, $sslContextRelaxed);
+    }
+    if (!$socket) {
+        error_log('[smtpSendMail] Could not connect to ' . $remoteSocket . ' (' . $errno . ': ' . $errstr . ')');
+        return false;
+    }
+>>>>>>> 43bfb442da3c38a00f6eae675e3e26b688c0ce67
 
     while ($attempts < $maxAttempts) {
         $attempts++;
@@ -350,4 +394,85 @@ function sendAdminNotificationEmail($adminEmail, $subject, $message, $actionLink
     $body = getEmailTemplate('Admin Notification', $content);
     
     return smtpSendMail($adminEmail, '[ADMIN] ' . $subject, $body);
+}
+
+function ensureEmailQueueTable($conn) {
+    $conn->query(
+        "CREATE TABLE IF NOT EXISTS email_queue (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            to_email VARCHAR(255) NOT NULL,
+            subject VARCHAR(255) NOT NULL,
+            body MEDIUMTEXT NOT NULL,
+            attempts INT DEFAULT 0,
+            status ENUM('pending','sending','sent','failed') DEFAULT 'pending',
+            last_error TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            sent_at TIMESTAMP NULL DEFAULT NULL,
+            INDEX idx_status (status),
+            INDEX idx_created_at (created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4"
+    );
+}
+
+function enqueueEmail($conn, $to, $subject, $body) {
+    $to = trim((string) $to);
+    if (!filter_var($to, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+
+    try {
+        ensureEmailQueueTable($conn);
+        $stmt = $conn->prepare('INSERT INTO email_queue (to_email, subject, body, status) VALUES (?, ?, ?, "pending")');
+        if (!$stmt) {
+            error_log('[enqueueEmail] prepare failed: ' . $conn->error);
+            return false;
+        }
+        $stmt->bind_param('sss', $to, $subject, $body);
+        $ok = $stmt->execute();
+        $stmt->close();
+        return $ok;
+    } catch (Throwable $e) {
+        error_log('[enqueueEmail] ' . $e->getMessage());
+        return false;
+    }
+}
+
+function processEmailQueue($conn, $limit = 20) {
+    ensureEmailQueueTable($conn);
+
+    $items = array();
+    $sql = 'SELECT id, to_email, subject, body, attempts FROM email_queue WHERE status IN ("pending", "failed") AND attempts < 5 ORDER BY id ASC LIMIT ' . (int) $limit;
+    $res = $conn->query($sql);
+    if ($res) {
+        while ($row = $res->fetch_assoc()) {
+            $items[] = $row;
+        }
+    }
+
+    $sent = 0;
+    foreach ($items as $item) {
+        $id = (int) $item['id'];
+
+        $markSending = $conn->prepare('UPDATE email_queue SET status = "sending", attempts = attempts + 1 WHERE id = ?');
+        $markSending->bind_param('i', $id);
+        $markSending->execute();
+        $markSending->close();
+
+        $ok = smtpSendMail((string) $item['to_email'], (string) $item['subject'], (string) $item['body']);
+        if ($ok) {
+            $sent++;
+            $done = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW(), last_error = NULL WHERE id = ?');
+            $done->bind_param('i', $id);
+            $done->execute();
+            $done->close();
+        } else {
+            $err = 'SMTP send failed';
+            $fail = $conn->prepare('UPDATE email_queue SET status = "failed", last_error = ? WHERE id = ?');
+            $fail->bind_param('si', $err, $id);
+            $fail->execute();
+            $fail->close();
+        }
+    }
+
+    return array('queued' => count($items), 'sent' => $sent);
 }

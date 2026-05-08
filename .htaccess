@@ -25,6 +25,9 @@ RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 # Browser fallback for favicon request
 RewriteRule ^favicon\.ico$ /favicon.png [L,R=302]
 
+# Always serve dynamic sitemap handler
+RewriteRule ^sitemap\.xml$ sitemap.php [L,QSA]
+
 # ── www → non-www (edit to suit your preference) ─────────────────
 RewriteCond %{HTTP_HOST} ^www\.accountsbazar\.com [NC]
 RewriteRule ^ https://accountsbazar.com%{REQUEST_URI} [L,R=301]
@@ -102,6 +105,10 @@ RewriteRule ^admin/index\.php$ admin/dashboard.php [L,QSA]
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
     Header always set Permissions-Policy "geolocation=(), microphone=(), camera=()"
     Header always set Strict-Transport-Security "max-age=31536000; includeSubDomains" env=HTTPS
+
+    <FilesMatch "\.(css|js|png|jpg|jpeg|gif|webp|svg|woff|woff2)$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
 </IfModule>
 
 # ── Gzip Compression ─────────────────────────────────────────────

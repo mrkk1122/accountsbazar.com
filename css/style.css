@@ -829,15 +829,19 @@ body {
 .product-details-grid {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: 20px;
+    gap: 0;
     align-items: start;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #ffffff;
 }
 
 .details-image-box {
     background: #f8fafc;
-    border: 1px solid #e2e8f0;
-    border-radius: 10px;
-    padding: 12px;
+    border-right: 1px solid #e2e8f0;
+    border-radius: 0;
+    padding: 0;
     min-width: 0;
 }
 
@@ -865,7 +869,12 @@ body {
     object-fit: contain;
     opacity: 0;
     transition: opacity 0.45s ease;
-    padding: 8px;
+    padding: 0;
+}
+
+.details-content {
+    padding: 18px 20px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
 }
 
 .details-slide.active {
@@ -940,13 +949,14 @@ body {
     margin-top: 16px;
     display: grid;
     grid-template-columns: 1fr;
-    gap: 10px;
+    gap: 8px;
 }
 
 .details-buy-full {
     display: block;
     width: 100%;
     margin-bottom: 0;
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.2);
 }
 
 .details-content,
@@ -1555,15 +1565,16 @@ footer {
 .social-btn.tg  { background: #229ed9; color: #fff; font-size: 12px; }
 .social-btn.wa  { background: #25d366; color: #fff; font-size: 13px; }
 
-/* PWA Install Floating Button (left side) */
+/* PWA Install Floating Button */
 #pwa-install-bar {
     position: fixed;
-    left: 12px;
-    bottom: 90px;
+    left: 50%;
+    transform: translateX(-50%);
+    bottom: 12px;
     z-index: 1400;
     display: flex !important;
     flex-direction: column;
-    align-items: flex-start;
+    align-items: center;
     gap: 2px;
     pointer-events: none;
 }
@@ -1574,11 +1585,11 @@ footer {
     pointer-events: all;
     display: flex;
     align-items: center;
-    gap: 7px;
+    gap: 6px;
     background: #ffffff;
     border: 1.5px solid #e2e8f0;
     border-radius: 999px;
-    padding: 7px 14px 7px 7px;
+    padding: 6px 11px 6px 6px;
     box-shadow: 0 4px 16px rgba(15,23,42,0.18);
     cursor: pointer;
     animation: pwaPopIn 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
@@ -1593,14 +1604,14 @@ footer {
     to   { opacity: 1; transform: translateX(0); }
 }
 .pwa-fab-icon {
-    width: 30px;
-    height: 30px;
+    width: 24px;
+    height: 24px;
     border-radius: 8px;
     object-fit: cover;
     flex-shrink: 0;
 }
 .pwa-fab-label {
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     color: #1e293b;
     white-space: nowrap;
@@ -1714,6 +1725,18 @@ footer {
         height: 52px;
     }
 
+    #pwa-install-bar {
+        bottom: 78px;
+    }
+
+    .pwa-fab-btn {
+        padding: 5px 10px 5px 5px;
+    }
+
+    .pwa-fab-label {
+        font-size: 10px;
+    }
+
     .home-hero {
         min-height: 420px;
         padding-bottom: 58px;
@@ -1787,6 +1810,10 @@ footer {
 
     .product-details-wrap {
         padding: 18px;
+    }
+
+    .details-content {
+        padding: 16px;
     }
 
     .details-title {

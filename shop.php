@@ -130,7 +130,7 @@ require_once 'products/includes/seo.php';
                                     ? 'products/' . $imagePath
                                     : $imagePath;
                                 ?>
-                                <img class="product-image" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>">
+                                <img class="product-image" loading="lazy" decoding="async" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name'] . ' flower bouquet'); ?>">
                             <?php else: ?>
                                 <div class="product-image">📦</div>
                             <?php endif; ?>

@@ -101,17 +101,17 @@
 }
 
 .notif-item.unread {
-    background: #0f1f3c;
-    border-bottom-color: rgba(212, 160, 23, 0.28);
+    background: #fee2e2;
+    border-bottom-color: #fecaca;
 }
 
 .notif-item.unread .notif-title,
 .notif-item.unread .notif-message {
-    color: #f8fafc;
+    color: #7f1d1d;
 }
 
 .notif-item.unread .notif-time {
-    color: #cbd5e1;
+    color: #991b1b;
 }
 
 .notif-title {
@@ -141,7 +141,7 @@
 /* Extra Small Devices (phones, less than 576px) */
 @media (max-width: 575.98px) {
     body {
-        padding-bottom: 0;
+        padding-bottom: 92px;
     }
 
     .nav-links {
@@ -389,10 +389,12 @@
     }
 
     .product-card {
-        border-radius: 6px;
+        border-radius: 10px;
         overflow: hidden;
-        box-shadow: none;
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.28);
         margin: 2px;
+        background: #ffffff;
     }
 
     .home-products-section {
@@ -480,7 +482,7 @@
 
     /* Footer */
     footer {
-        padding: 30px 15px 0;
+        padding: 30px 15px 100px;
         margin-top: 40px;
     }
 
@@ -692,9 +694,11 @@
     }
 
     .product-card {
-        border-radius: 6px;
-        box-shadow: none;
+        border-radius: 10px;
+        box-shadow: 0 10px 20px rgba(15, 23, 42, 0.12);
+        border: 1px solid rgba(148, 163, 184, 0.28);
         margin: 2px;
+        background: #ffffff;
     }
 
     .pagination-wrap {
@@ -780,6 +784,39 @@
 }
 
 @media (max-width: 767.98px) {
+    body {
+        background-attachment: scroll;
+    }
+
+    .navbar {
+        padding: 10px 0;
+    }
+
+    .store-brand {
+        padding-right: 64px;
+    }
+
+    .store-title {
+        font-size: clamp(24px, 7.4vw, 34px);
+        letter-spacing: 0.8px;
+    }
+
+    .section-title {
+        font-size: clamp(24px, 7vw, 30px);
+    }
+
+    .product-image {
+        border-bottom: 1px solid rgba(148, 163, 184, 0.24);
+    }
+
+    .product-card:active {
+        transform: translateY(1px);
+    }
+
+    .footer {
+        padding-bottom: 108px;
+    }
+
     .product-title {
         font-family: "Arial Black", "Segoe UI", sans-serif !important;
         font-size: 19px !important;

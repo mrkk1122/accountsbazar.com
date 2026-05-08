@@ -107,7 +107,7 @@ require_once 'products/includes/seo.php';
                             onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href='product-details.php?id=<?php echo (int) $product['id']; ?>'; }"
                         >
                             <?php if (!empty($product['image'])): ?>
-                                <img class="product-image" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name']); ?>">
+                                <img class="product-image" loading="lazy" decoding="async" src="<?php echo htmlspecialchars($imageSrc); ?>" alt="<?php echo htmlspecialchars($product['name'] . ' flower bouquet'); ?>">
                             <?php else: ?>
                                 <div class="product-image">📦</div>
                             <?php endif; ?>

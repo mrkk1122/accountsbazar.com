@@ -303,6 +303,195 @@ function initNotificationCenter() {
         localStorage.setItem('ab_seen_notif_uids', JSON.stringify(map));
     }
 
+    function getPushedMap() {
+        try {
+            const data = localStorage.getItem('ab_pushed_notif_uids');
+            return data ? JSON.parse(data) : {};
+        } catch (e) {
+            return {};
+        }
+    }
+
+    function setPushedMap(map) {
+        localStorage.setItem('ab_pushed_notif_uids', JSON.stringify(map));
+    }
+
+    function isHomePage() {
+        const path = (window.location.pathname || '').toLowerCase();
+        return path === '/' || path.endsWith('/index.php');
+    }
+
+    function urlBase64ToUint8Array(base64String) {
+        const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+        const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+        const rawData = window.atob(base64);
+        const outputArray = new Uint8Array(rawData.length);
+        for (let i = 0; i < rawData.length; ++i) {
+            outputArray[i] = rawData.charCodeAt(i);
+        }
+        return outputArray;
+    }
+
+    function getVapidPublicKey() {
+        var fromWindow = (window.AB_WEBPUSH_PUBLIC_KEY || '').toString().trim();
+        if (fromWindow) {
+            return fromWindow;
+        }
+
+        var meta = document.querySelector('meta[name="ab-webpush-public-key"]');
+        if (meta) {
+            return (meta.getAttribute('content') || '').toString().trim();
+        }
+
+        return '';
+    }
+
+    function savePushSubscription(subscription) {
+        if (!subscription) {
+            return Promise.resolve(false);
+        }
+
+        return fetch('push-subscription.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                action: 'subscribe',
+                subscription: subscription.toJSON()
+            })
+        }).then(function(response) {
+            return response.json();
+        }).then(function(data) {
+            return !!(data && data.success);
+        }).catch(function() {
+            return false;
+        });
+    }
+
+    function ensurePushSubscription() {
+        const vapidKey = getVapidPublicKey();
+        if (!vapidKey || !('serviceWorker' in navigator)) {
+            return Promise.resolve(false);
+        }
+
+        return getServiceWorkerRegistration().then(function(reg) {
+            if (!reg || !reg.pushManager) {
+                return false;
+            }
+
+            return reg.pushManager.getSubscription().then(function(existing) {
+                if (existing) {
+                    return savePushSubscription(existing);
+                }
+
+                return reg.pushManager.subscribe({
+                    userVisibleOnly: true,
+                    applicationServerKey: urlBase64ToUint8Array(vapidKey)
+                }).then(function(subscription) {
+                    return savePushSubscription(subscription);
+                });
+            });
+        }).catch(function() {
+            return false;
+        });
+    }
+
+    function ensureNotificationPermission() {
+        if (!('Notification' in window)) {
+            return;
+        }
+
+        if (Notification.permission === 'granted') {
+            ensurePushSubscription();
+            return;
+        }
+
+        if (Notification.permission !== 'default') {
+            return;
+        }
+
+        const askKey = 'ab_notif_permission_asked_once';
+        try {
+            if (sessionStorage.getItem(askKey) === '1') {
+                return;
+            }
+            sessionStorage.setItem(askKey, '1');
+        } catch (e) {
+            // continue without session storage gate
+        }
+
+        setTimeout(function() {
+            Notification.requestPermission().then(function(permission) {
+                if (permission === 'granted') {
+                    ensurePushSubscription();
+                }
+            }).catch(function() {
+                return 'default';
+            });
+        }, 900);
+    }
+
+    let swRegistrationPromise = null;
+    function getServiceWorkerRegistration() {
+        if (!('serviceWorker' in navigator)) {
+            return Promise.resolve(null);
+        }
+
+        if (!swRegistrationPromise) {
+            swRegistrationPromise = navigator.serviceWorker.getRegistration().then(function(reg) {
+                if (reg) {
+                    return reg;
+                }
+                return navigator.serviceWorker.register('sw.js').catch(function() {
+                    return null;
+                });
+            }).catch(function() {
+                return null;
+            });
+        }
+
+        return swRegistrationPromise;
+    }
+
+    function showSystemNotification(item) {
+        if (!item || !item.uid || !('Notification' in window) || Notification.permission !== 'granted') {
+            return;
+        }
+
+        const title = (item.title || 'Accounts Bazar').toString();
+        const body = (item.message || '').toString();
+        const targetUrl = (item.url || 'index.php').toString();
+
+        const pushedMap = getPushedMap();
+        if (pushedMap[item.uid]) {
+            return;
+        }
+
+        const notificationOptions = {
+            body: body,
+            icon: 'images/logo.png',
+            badge: 'favicon.png',
+            tag: 'ab-' + item.uid,
+            renotify: false,
+            data: {
+                url: targetUrl
+            }
+        };
+
+        getServiceWorkerRegistration().then(function(reg) {
+            if (reg && typeof reg.showNotification === 'function') {
+                reg.showNotification(title, notificationOptions);
+            } else {
+                new Notification(title, {
+                    body: body,
+                    icon: 'images/logo.png'
+                });
+            }
+
+            pushedMap[item.uid] = 1;
+            setPushedMap(pushedMap);
+        });
+    }
+
     function renderItems(items, seenMap) {
         if (!Array.isArray(items) || items.length === 0) {
             listEl.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
@@ -315,8 +504,9 @@ function initNotificationCenter() {
             const message = (item.message || '').toString();
             const url = (item.url || '#').toString();
             const time = (item.created_at || '').toString();
+            const uid = (item.uid || '').toString();
             return '' +
-                '<a class="notif-item' + (unread ? ' unread' : '') + '" href="' + url + '">' +
+                '<a class="notif-item' + (unread ? ' unread' : '') + '" href="' + url + '" data-notif-uid="' + uid + '">' +
                     '<div class="notif-title">' + title + '</div>' +
                     '<div class="notif-message">' + message + '</div>' +
                     '<div class="notif-time">' + time + '</div>' +
@@ -327,6 +517,11 @@ function initNotificationCenter() {
 
         listEl.querySelectorAll('.notif-item').forEach(function(link) {
             link.addEventListener('click', function() {
+                const uid = (link.getAttribute('data-notif-uid') || '').trim();
+                if (uid) {
+                    markSeen(uid);
+                    updateUnreadState();
+                }
                 panel.classList.remove('open');
             });
         });
@@ -342,17 +537,27 @@ function initNotificationCenter() {
         }
     }
 
-    function markAllSeen(items) {
+    function markSeen(uid) {
+        if (!uid) {
+            return;
+        }
+
         const seenMap = getSeenMap();
-        items.forEach(function(item) {
-            if (item && item.uid) {
-                seenMap[item.uid] = 1;
-            }
-        });
+        seenMap[uid] = 1;
         setSeenMap(seenMap);
     }
 
     let latestItems = [];
+
+    function updateUnreadState() {
+        const seenMap = getSeenMap();
+        const unreadCount = latestItems.filter(function(item) {
+            return item && item.uid && !seenMap[item.uid];
+        }).length;
+
+        updateBadge(unreadCount);
+        renderItems(latestItems, seenMap);
+    }
 
     function loadNotifications() {
         fetch('notifications-feed.php', { cache: 'no-store' })
@@ -363,13 +568,37 @@ function initNotificationCenter() {
                 }
 
                 latestItems = data.items;
-                const seenMap = getSeenMap();
-                const unreadCount = latestItems.filter(function(item) {
-                    return item && item.uid && !seenMap[item.uid];
-                }).length;
 
-                updateBadge(unreadCount);
-                renderItems(latestItems, seenMap);
+                const bootstrapKey = 'ab_notif_push_bootstrap_done';
+                const pushedMap = getPushedMap();
+                let shouldBootstrap = false;
+                try {
+                    shouldBootstrap = localStorage.getItem(bootstrapKey) !== '1';
+                } catch (e) {
+                    shouldBootstrap = false;
+                }
+
+                if (shouldBootstrap) {
+                    latestItems.forEach(function(item) {
+                        if (item && item.uid) {
+                            pushedMap[item.uid] = 1;
+                        }
+                    });
+                    setPushedMap(pushedMap);
+                    try {
+                        localStorage.setItem(bootstrapKey, '1');
+                    } catch (e) {
+                        // ignore storage errors
+                    }
+                } else {
+                    latestItems.forEach(function(item) {
+                        if (item && item.uid && !pushedMap[item.uid]) {
+                            showSystemNotification(item);
+                        }
+                    });
+                }
+
+                updateUnreadState();
             })
             .catch(function() {
                 listEl.innerHTML = '<div class="notif-empty">Notification unavailable.</div>';
@@ -380,8 +609,6 @@ function initNotificationCenter() {
         event.preventDefault();
         panel.classList.toggle('open');
         if (panel.classList.contains('open')) {
-            markAllSeen(latestItems);
-            updateBadge(0);
             renderItems(latestItems, getSeenMap());
         }
     });
@@ -397,7 +624,8 @@ function initNotificationCenter() {
     });
 
     loadNotifications();
-    setInterval(loadNotifications, 30000);
+    ensureNotificationPermission();
+    setInterval(loadNotifications, 10000);
 }
 
 function initHeaderSearch() {
