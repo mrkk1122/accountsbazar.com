@@ -273,6 +273,78 @@ HTML;
     return $html;
 }
 
+/**
+ * Stylish order confirmation email template
+ */
+function getOrderConfirmationEmailTemplate($data = array()) {
+    $baseUrl = 'https://accountsbazar.com';
+    $profileLink = $baseUrl . '/profile.php';
+    $supportEmail = htmlspecialchars((string) MAIL_REPLY_TO, ENT_QUOTES, 'UTF-8');
+
+    $customerName = htmlspecialchars((string) ($data['customer_name'] ?? 'Customer'), ENT_QUOTES, 'UTF-8');
+    $orderNumber = htmlspecialchars((string) ($data['order_number'] ?? ''), ENT_QUOTES, 'UTF-8');
+    $productName = htmlspecialchars((string) ($data['product_name'] ?? 'Product'), ENT_QUOTES, 'UTF-8');
+    $planName = htmlspecialchars((string) ($data['plan_name'] ?? 'Standard'), ENT_QUOTES, 'UTF-8');
+    $paymentMethod = htmlspecialchars((string) ($data['payment_method'] ?? 'N/A'), ENT_QUOTES, 'UTF-8');
+    $trxId = htmlspecialchars((string) ($data['trx_id'] ?? 'N/A'), ENT_QUOTES, 'UTF-8');
+    $subtotal = number_format((float) ($data['subtotal'] ?? 0), 2);
+    $discount = number_format((float) ($data['discount'] ?? 0), 2);
+    $total = number_format((float) ($data['total'] ?? 0), 2);
+
+    return <<<HTML
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Order Confirmed</title>
+</head>
+<body style="margin:0;padding:0;background:#eef2ff;font-family:Arial,Helvetica,sans-serif;">
+    <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background:#eef2ff;padding:22px 10px;">
+        <tr>
+            <td align="center">
+                <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:620px;background:#ffffff;border-radius:14px;overflow:hidden;border:1px solid #dbeafe;">
+                    <tr>
+                        <td style="padding:22px 24px;background:linear-gradient(135deg,#0f172a 0%,#1d4ed8 55%,#0ea5e9 100%);color:#ffffff;">
+                            <div style="font-size:21px;font-weight:800;letter-spacing:.3px;">Accounts Bazar</div>
+                            <div style="font-size:13px;opacity:.92;margin-top:4px;">Order confirmation and receipt</div>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td style="padding:24px;">
+                            <h2 style="margin:0 0 12px;color:#0f172a;font-size:22px;">Your Order Is Confirmed</h2>
+                            <p style="margin:0 0 16px;color:#334155;font-size:14px;line-height:1.6;">Hello {$customerName}, thank you for shopping with us. Your order has been received and is now in our processing queue.</p>
+
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                                <tr><td style="padding:11px 14px;background:#f8fafc;color:#475569;font-size:13px;">Order Number</td><td style="padding:11px 14px;background:#f8fafc;color:#0f172a;font-size:13px;font-weight:700;text-align:right;">{$orderNumber}</td></tr>
+                                <tr><td style="padding:11px 14px;color:#475569;font-size:13px;border-top:1px solid #eef2f7;">Product</td><td style="padding:11px 14px;color:#0f172a;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #eef2f7;">{$productName}</td></tr>
+                                <tr><td style="padding:11px 14px;color:#475569;font-size:13px;border-top:1px solid #eef2f7;">Plan</td><td style="padding:11px 14px;color:#0f172a;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #eef2f7;">{$planName}</td></tr>
+                                <tr><td style="padding:11px 14px;color:#475569;font-size:13px;border-top:1px solid #eef2f7;">Payment Method</td><td style="padding:11px 14px;color:#0f172a;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #eef2f7;">{$paymentMethod}</td></tr>
+                                <tr><td style="padding:11px 14px;color:#475569;font-size:13px;border-top:1px solid #eef2f7;">Transaction ID</td><td style="padding:11px 14px;color:#0f172a;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #eef2f7;">{$trxId}</td></tr>
+                            </table>
+
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="margin-top:14px;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;">
+                                <tr><td style="padding:10px 14px;color:#64748b;font-size:13px;">Subtotal</td><td style="padding:10px 14px;color:#334155;font-size:13px;font-weight:700;text-align:right;">BDT {$subtotal}</td></tr>
+                                <tr><td style="padding:10px 14px;color:#64748b;font-size:13px;border-top:1px solid #eef2f7;">Discount</td><td style="padding:10px 14px;color:#16a34a;font-size:13px;font-weight:700;text-align:right;border-top:1px solid #eef2f7;">- BDT {$discount}</td></tr>
+                                <tr><td style="padding:12px 14px;color:#0f172a;font-size:14px;font-weight:800;border-top:1px solid #e2e8f0;background:#f8fafc;">Total Paid</td><td style="padding:12px 14px;color:#0f172a;font-size:14px;font-weight:800;text-align:right;border-top:1px solid #e2e8f0;background:#f8fafc;">BDT {$total}</td></tr>
+                            </table>
+
+                            <div style="text-align:center;margin-top:20px;">
+                                <a href="{$profileLink}" style="display:inline-block;background:#1d4ed8;color:#ffffff;text-decoration:none;padding:11px 22px;border-radius:8px;font-size:13px;font-weight:700;">View My Orders</a>
+                            </div>
+
+                            <p style="margin:18px 0 0;color:#64748b;font-size:12px;line-height:1.6;">Need help? Reply to this email or contact support at <a href="mailto:{$supportEmail}" style="color:#2563eb;text-decoration:none;">{$supportEmail}</a>.</p>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
+HTML;
+}
+
 // ==================== NOTIFICATION EMAIL FUNCTIONS ====================
 
 /**
@@ -300,22 +372,19 @@ function sendRegistrationEmail($email, $name, $username) {
  * Send order confirmation email
  */
 function sendOrderConfirmationEmail($email, $name, $orderId, $orderDetails) {
-    $baseUrl = 'http://' . ($_SERVER['HTTP_HOST'] ?? 'accountsbazar.com');
-    $orderLink = $baseUrl . '/order-details.php?id=' . urlencode($orderId);
-    
-    $content = "<p>Dear $name,</p>";
-    $content .= "<p>Thank you for your order! We've received your order and will process it shortly.</p>";
-    $content .= "<p><strong>Order Details:</strong></p>";
-    $content .= "<ul>";
-    $content .= "<li><strong>Order ID:</strong> $orderId</li>";
-    $content .= "<li><strong>Total Amount:</strong> " . $orderDetails['amount'] . "</li>";
-    $content .= "<li><strong>Status:</strong> Pending</li>";
-    $content .= "</ul>";
-    $content .= "<p>We'll send you updates about your order status.</p>";
-    
-    $body = getEmailTemplate('Order Confirmation', $content, 'View Order', $orderLink);
-    
-    return smtpSendMail($email, 'Order Confirmation – Order #' . $orderId, $body);
+    $body = getOrderConfirmationEmailTemplate(array(
+        'customer_name' => $name,
+        'order_number' => $orderId,
+        'product_name' => (string) ($orderDetails['product_name'] ?? 'Product'),
+        'plan_name' => (string) ($orderDetails['plan_name'] ?? 'Standard'),
+        'payment_method' => (string) ($orderDetails['payment_method'] ?? 'N/A'),
+        'trx_id' => (string) ($orderDetails['trx_id'] ?? 'N/A'),
+        'subtotal' => (float) ($orderDetails['amount'] ?? 0),
+        'discount' => (float) ($orderDetails['discount'] ?? 0),
+        'total' => (float) ($orderDetails['amount'] ?? 0)
+    ));
+
+    return smtpSendMail($email, 'Order Confirmation - Order #' . $orderId, $body);
 }
 
 /**

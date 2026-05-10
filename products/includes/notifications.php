@@ -98,7 +98,16 @@ class NotificationManager {
         
         // Send email if data provided and user preferences allow
         if ($emailData && $this->shouldSendEmail($userId, $type)) {
-            $this->queueEmailNotification($userId, $type, $emailData);
+            $email = (string) ($emailData['email'] ?? '');
+            $subject = (string) ($emailData['subject'] ?? '');
+            $body = (string) ($emailData['body'] ?? '');
+
+            if ($email !== '' && $subject !== '' && $body !== '') {
+                $sent = smtpSendMail($email, $subject, $body);
+                if (!$sent) {
+                    $this->queueEmailNotification($userId, $type, $emailData);
+                }
+            }
         }
         
         return true;
@@ -270,18 +279,21 @@ class NotificationManager {
      */
     public function notifyOrderCreated($orderId, $userId, $userEmail, $userName) {
         $orderDetails = $this->getOrderDetails($orderId);
-        $content = '<p>Dear ' . htmlspecialchars((string) $userName, ENT_QUOTES, 'UTF-8') . ',</p>';
-        $content .= '<p>Your order has been received successfully.</p>';
-        $content .= '<ul>';
-        $content .= '<li><strong>Order ID:</strong> ' . htmlspecialchars((string) $orderId, ENT_QUOTES, 'UTF-8') . '</li>';
-        $content .= '<li><strong>Total Amount:</strong> ' . htmlspecialchars((string) $orderDetails['amount'], ENT_QUOTES, 'UTF-8') . '</li>';
-        $content .= '<li><strong>Status:</strong> Pending</li>';
-        $content .= '</ul>';
+
+        $emailBody = getOrderConfirmationEmailTemplate(array(
+            'customer_name' => (string) $userName,
+            'order_number' => (string) $orderId,
+            'subtotal' => (float) ($orderDetails['amount'] ?? 0),
+            'discount' => 0,
+            'total' => (float) ($orderDetails['amount'] ?? 0),
+            'payment_method' => 'N/A',
+            'trx_id' => 'N/A'
+        ));
         
         $emailData = array(
             'email' => $userEmail,
-            'subject' => 'Order Confirmation – Order #' . $orderId,
-            'body' => getEmailTemplate('Order Confirmation', $content, 'View Order', 'https://accountsbazar.com/profile.php')
+            'subject' => 'Order Confirmation - Order #' . $orderId,
+            'body' => $emailBody
         );
         
         return $this->sendNotification(

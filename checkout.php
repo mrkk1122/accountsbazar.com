@@ -159,19 +159,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
         try {
             $notificationManager = new NotificationManager();
             $mailSubject = 'Order Confirmed: ' . $orderNum . ' | Accounts Bazar';
-            $mailContent = '<p>Dear ' . htmlspecialchars($fullName, ENT_QUOTES, 'UTF-8') . ',</p>';
-            $mailContent .= '<p>Thank you for your order! Here are your details:</p>';
-            $mailContent .= '<ul>';
-            $mailContent .= '<li><strong>Order Number:</strong> ' . htmlspecialchars($orderNum, ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>Product:</strong> ' . htmlspecialchars((string) $prod['name'], ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>Plan:</strong> ' . htmlspecialchars($allowedPlans[$plan], ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>Delivery:</strong> Standard</li>';
-            $mailContent .= '<li><strong>Subtotal:</strong> BDT ' . number_format($subtotal, 2) . '</li>';
-            $mailContent .= '<li><strong>Discount:</strong> BDT ' . number_format($discountAmount, 2) . '</li>';
-            $mailContent .= '<li><strong>Final Total:</strong> BDT ' . number_format($price, 2) . '</li>';
-            $mailContent .= '<li><strong>Payment:</strong> ' . htmlspecialchars($payMethod, ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>TrxID:</strong> ' . htmlspecialchars($trxId, ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '</ul>';
+            $mailBody = getOrderConfirmationEmailTemplate(array(
+                'customer_name' => $fullName,
+                'order_number' => $orderNum,
+                'product_name' => (string) $prod['name'],
+                'plan_name' => (string) ($allowedPlans[$plan] ?? 'Standard'),
+                'payment_method' => strtoupper($payMethod),
+                'trx_id' => $trxId,
+                'subtotal' => $subtotal,
+                'discount' => $discountAmount,
+                'total' => $price
+            ));
 
             $notificationManager->sendNotification(
                 $userId,
@@ -182,7 +180,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
                 array(
                     'email' => $email,
                     'subject' => $mailSubject,
-                    'body' => getEmailTemplate('Order Confirmation', $mailContent, 'View Orders', 'https://accountsbazar.com/profile.php')
+                    'body' => $mailBody
                 )
             );
         } catch (Exception $e) {
