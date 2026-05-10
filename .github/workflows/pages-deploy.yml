@@ -5,6 +5,9 @@ on:
     branches: [main]
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 permissions:
   contents: read
   pages: write
@@ -24,6 +27,25 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Verify Pages is enabled
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          REPO="${{ github.repository }}"
+          STATUS=$(curl -s -o /tmp/pages.json -w "%{http_code}" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/$REPO/pages")
+
+          if [ "$STATUS" != "200" ]; then
+            echo "GitHub Pages is not enabled for $REPO (HTTP $STATUS)."
+            echo "Enable it here: https://github.com/$REPO/settings/pages"
+            echo "Set Source to: GitHub Actions"
+            cat /tmp/pages.json || true
+            exit 1
+          fi
 
       - name: Prepare static artifact
         run: |
