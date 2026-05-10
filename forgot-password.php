@@ -11,6 +11,32 @@ function ensurePasswordResetsTable($conn) {
         return false;
     }
 
+    $columnExists = function ($table, $column) use ($conn) {
+        $safeTable = $conn->real_escape_string((string) $table);
+        $safeColumn = $conn->real_escape_string((string) $column);
+        $sql = "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'";
+        $res = $conn->query($sql);
+        if (!$res) {
+            return false;
+        }
+        $row = $res->fetch_assoc();
+        $res->free();
+        return !empty($row);
+    };
+
+    $indexExists = function ($table, $indexName) use ($conn) {
+        $safeTable = $conn->real_escape_string((string) $table);
+        $safeIndex = $conn->real_escape_string((string) $indexName);
+        $sql = "SHOW INDEX FROM `" . $safeTable . "` WHERE Key_name = '" . $safeIndex . "'";
+        $res = $conn->query($sql);
+        if (!$res) {
+            return false;
+        }
+        $row = $res->fetch_assoc();
+        $res->free();
+        return !empty($row);
+    };
+
     $queries = array(
         'CREATE TABLE IF NOT EXISTS `password_resets` (
             `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -38,13 +64,43 @@ function ensurePasswordResetsTable($conn) {
         ) ENGINE=InnoDB'
     );
 
+    $created = false;
     foreach ($queries as $sql) {
         if (@$conn->query($sql)) {
-            return true;
+            $created = true;
+            break;
         }
     }
 
-    return false;
+    if (!$created) {
+        return false;
+    }
+
+    // Reconcile legacy hosting schemas where table exists without required columns.
+    if (!$columnExists('password_resets', 'email')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD COLUMN `email` VARCHAR(255) NOT NULL');
+    }
+    if (!$columnExists('password_resets', 'otp_code')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD COLUMN `otp_code` VARCHAR(6) NOT NULL');
+    }
+    if (!$columnExists('password_resets', 'expires_at')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD COLUMN `expires_at` DATETIME NOT NULL');
+    }
+    if (!$columnExists('password_resets', 'created_at')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD COLUMN `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP');
+    }
+
+    if (!$indexExists('password_resets', 'idx_email')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD INDEX `idx_email` (`email`)');
+    }
+    if (!$indexExists('password_resets', 'idx_expires_at')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD INDEX `idx_expires_at` (`expires_at`)');
+    }
+    if (!$indexExists('password_resets', 'idx_email_otp')) {
+        @$conn->query('ALTER TABLE `password_resets` ADD INDEX `idx_email_otp` (`email`, `otp_code`)');
+    }
+
+    return $columnExists('password_resets', 'otp_code') && $columnExists('password_resets', 'expires_at');
 }
 
 // ── Ensure the password_resets table exists ───────────────────────────────────
