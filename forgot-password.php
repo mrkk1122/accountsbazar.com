@@ -142,6 +142,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $queueResult = processEmailQueue($conn, 3);
                     }
 
+                    // If SMTP failed, try PHP mail() as fallback
+                    $phpMailSent = false;
+                    if (!$smtpSent && !((int) ($queueResult['sent'] ?? 0) > 0)) {
+                        $headers = "From: Accounts Bazar <" . MAIL_FROM_ADDRESS . ">\r\n";
+                        $headers .= "MIME-Version: 1.0\r\n";
+                        $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+                        $phpMailSent = @mail($email, $subject, $htmlBody, $headers);
+                        if ($phpMailSent) {
+                            logMailActivity($email, $subject, 'SUCCESS', 'Sent via PHP mail() fallback');
+                        }
+                    }
+
                     if ($smtpSent && $mailQueued) {
                         // Mark as sent in the queue so cron does not resend
                         $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
@@ -153,10 +165,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     }
                     $db->closeConnection();
 
-                    $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0);
+                    $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
 
-                    if (!$sentNow && !$mailQueued) {
-                        $error = 'Could not send OTP email. Please try again or contact support.';
+                    // Store OTP info in session for debugging if mail fails
+                    if (!$sentNow) {
+                        $_SESSION['fp_otp_code'] = $otp;
+                    }
+
+                    if (!$mailQueued) {
+                        $error = 'Could not queue OTP email. Please try again or contact support.';
                     } else {
                         $_SESSION['fp_step']   = 'otp';
                         $_SESSION['fp_email']  = $email;
