@@ -134,16 +134,20 @@ function usersColumnExists($conn, $columnName) {
         return false;
     }
 
-    $sql = 'SHOW COLUMNS FROM users LIKE ?';
-    $stmt = $conn->prepare($sql);
-    if (!$stmt) {
+    $columnName = trim((string) $columnName);
+    if ($columnName === '') {
         return false;
     }
-    $stmt->bind_param('s', $columnName);
-    $stmt->execute();
-    $row = stmtFetchAssocRow($stmt);
-    $stmt->close();
 
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SHOW COLUMNS FROM `users` LIKE '" . $safeColumn . "'";
+    $result = $conn->query($sql);
+    if (!$result) {
+        return false;
+    }
+
+    $row = $result->fetch_assoc();
+    $result->free();
     return !empty($row);
 }
 
