@@ -383,7 +383,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                             $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
                             if ($insStmt) {
                                 $insStmt->bind_param('sss', $email, $otp, $expires);
-                                $otpStoredInDb = $insStmt->execute();
+                                try {
+                                    $otpStoredInDb = $insStmt->execute();
+                                } catch (Throwable $insEx) {
+                                    error_log('[ForgotPassword/send_otp] INSERT execute failed (base): ' . $insEx->getMessage());
+                                    $otpStoredInDb = false;
+                                }
                                 $insStmt->close();
 
                                 // Legacy schema fallback: old tables may require a non-null token column.
@@ -398,7 +403,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                                     $insWithToken = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at, token) VALUES (?, ?, ?, ?)');
                                     if ($insWithToken) {
                                         $insWithToken->bind_param('ssss', $email, $otp, $expires, $otpToken);
-                                        $otpStoredInDb = $insWithToken->execute();
+                                        try {
+                                            $otpStoredInDb = $insWithToken->execute();
+                                        } catch (Throwable $tokenInsEx) {
+                                            error_log('[ForgotPassword/send_otp] INSERT execute failed (token): ' . $tokenInsEx->getMessage());
+                                            $otpStoredInDb = false;
+                                        }
                                         $insWithToken->close();
                                     }
                                 }
