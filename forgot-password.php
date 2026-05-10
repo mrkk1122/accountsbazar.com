@@ -342,7 +342,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         // even when cron is not yet configured.
                         $queueResult = array('queued' => 0, 'sent' => 0);
                         if ($mailQueued) {
-                            $queueResult = processEmailQueue($conn, 3);
+                            $queueResult = processEmailQueue($conn, 10);
                         }
 
                         // If SMTP failed, try PHP mail() as fallback

@@ -669,7 +669,10 @@ function processEmailQueue($conn, $limit = 20) {
     ensureEmailQueueTable($conn);
 
     $items = array();
-    $sql = 'SELECT id, to_email, subject, body, attempts FROM email_queue WHERE status IN ("pending", "failed") AND attempts < 5 ORDER BY id ASC LIMIT ' . (int) $limit;
+    // Prioritize newest pending emails (like OTP) before retrying older failed ones.
+    $sql = 'SELECT id, to_email, subject, body, attempts, status FROM email_queue '
+        . 'WHERE status IN ("pending", "failed") AND attempts < 5 '
+        . 'ORDER BY CASE WHEN status = "pending" THEN 0 ELSE 1 END, id DESC LIMIT ' . (int) $limit;
     $res = $conn->query($sql);
     if ($res) {
         while ($row = $res->fetch_assoc()) {
