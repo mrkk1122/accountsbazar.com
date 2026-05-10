@@ -33,5 +33,5 @@ define('MAIL_POP3_AUTH', true);
 // Mail Settings
 define('MAIL_SEND_TIMEOUT', 30);
 define('MAIL_RETRY_ATTEMPTS', 3);
-define('MAIL_DEBUG_MODE', false);
+define('MAIL_DEBUG_MODE', true);
 define('MAIL_LOG_ENABLED', true);

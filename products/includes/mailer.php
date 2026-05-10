@@ -66,7 +66,7 @@ function logMailActivity($recipient, $subject, $status, $error = '') {
 }
 
 /**
- * Core SMTP Mail Sending Function with retry logic
+ * Core SMTP Mail Sending Function with retry logic and fallback
  */
 function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username = MAIL_SMTP_USERNAME, $password = MAIL_SMTP_PASSWORD) {
     $to = trim((string) $to);
@@ -85,7 +85,11 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         $missingCredentials[] = 'MAIL_SMTP_PASSWORD';
     }
     if (!empty($missingCredentials)) {
-        error_log('[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '. Set environment variables MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.');
+        $error = '[smtpSendMail] Missing SMTP credentials in mail config constants: ' . implode(', ', $missingCredentials) . '. Set environment variables MAIL_SMTP_USERNAME and MAIL_SMTP_PASSWORD.';
+        if (MAIL_DEBUG_MODE) {
+            error_log($error);
+        }
+        logMailActivity($to, $subject, 'FAILED', $error);
         return false;
     }
 
@@ -167,7 +171,11 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
             || !smtpSendCommand($socket, base64_encode($smtpPassword), array(235))) {
             fclose($socket);
             if ($attempts >= $maxAttempts) {
-                logMailActivity($to, $subject, 'FAILED', 'Authentication failed');
+                $debugMsg = 'Authentication failed | Username: ' . $smtpUsername . ' | Host: ' . MAIL_SMTP_HOST;
+                if (MAIL_DEBUG_MODE) {
+                    error_log('[smtpSendMail] ' . $debugMsg);
+                }
+                logMailActivity($to, $subject, 'FAILED', $debugMsg);
                 return false;
             }
             sleep(1);
@@ -179,7 +187,11 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
             || !smtpSendCommand($socket, 'DATA', array(354))) {
             fclose($socket);
             if ($attempts >= $maxAttempts) {
-                logMailActivity($to, $subject, 'FAILED', 'MAIL FROM/RCPT TO failed');
+                $debugMsg = 'MAIL FROM/RCPT TO failed | From: ' . MAIL_FROM_ADDRESS . ' | To: ' . $to;
+                if (MAIL_DEBUG_MODE) {
+                    error_log('[smtpSendMail] ' . $debugMsg);
+                }
+                logMailActivity($to, $subject, 'FAILED', $debugMsg);
                 return false;
             }
             continue;
@@ -214,6 +226,24 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
     }
 
     logMailActivity($to, $subject, 'FAILED', "Failed after $maxAttempts attempts");
+    
+    // Fallback: Try PHP's built-in mail() function as last resort
+    if (MAIL_DEBUG_MODE) {
+        error_log('[smtpSendMail] SMTP failed, attempting fallback with mail() function');
+    }
+    
+    $headers = "From: " . MAIL_FROM_NAME . " <" . MAIL_FROM_ADDRESS . ">\r\n";
+    $headers .= "Reply-To: " . $replyTo . "\r\n";
+    $headers .= "MIME-Version: 1.0\r\n";
+    $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+    $headers .= "X-Mailer: Accounts Bazar";
+    
+    if (@mail($to, $subject, $body, $headers)) {
+        logMailActivity($to, $subject, 'SUCCESS', 'Sent via PHP mail() fallback');
+        return true;
+    }
+    
+    logMailActivity($to, $subject, 'FAILED', 'All mail methods failed (SMTP + PHP mail)');
     return false;
 }
 
@@ -279,7 +309,7 @@ HTML;
 function getOrderConfirmationEmailTemplate($data = array()) {
     $baseUrl = 'https://accountsbazar.com';
     $profileLink = $baseUrl . '/profile.php';
-    $supportEmail = htmlspecialchars((string) MAIL_REPLY_TO, ENT_QUOTES, 'UTF-8');
+    $supportEmail = htmlspecialchars((string) (defined('MAIL_REPLY_TO') ? MAIL_REPLY_TO : 'support@accountsbazar.com'), ENT_QUOTES, 'UTF-8');
 
     $customerName = htmlspecialchars((string) ($data['customer_name'] ?? 'Customer'), ENT_QUOTES, 'UTF-8');
     $orderNumber = htmlspecialchars((string) ($data['order_number'] ?? ''), ENT_QUOTES, 'UTF-8');
