@@ -32,6 +32,33 @@ function iniSizeToBytes($value) {
     return (int) $num;
 }
 
+function ensureProductsImageColumnCapacity($conn) {
+    if (!$conn) {
+        return;
+    }
+
+    $result = @$conn->query("SHOW COLUMNS FROM `products` LIKE 'image'");
+    if (!$result) {
+        return;
+    }
+
+    $column = $result->fetch_assoc();
+    $result->free();
+    if (!$column) {
+        return;
+    }
+
+    $type = strtolower((string) ($column['Type'] ?? ''));
+    if (strpos($type, 'varchar(') === 0) {
+        if (preg_match('/varchar\((\d+)\)/', $type, $m)) {
+            $length = (int) ($m[1] ?? 0);
+            if ($length > 0 && $length < 1024) {
+                @$conn->query("ALTER TABLE `products` MODIFY COLUMN `image` TEXT NULL");
+            }
+        }
+    }
+}
+
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
     http_response_code(400);
     echo json_encode(array('success' => false, 'message' => 'POST request required'));
@@ -54,6 +81,7 @@ try {
 
     $db = new Database();
     $conn = $db->getConnection();
+    ensureProductsImageColumnCapacity($conn);
     
     $name = sanitizeInput($_POST['name'] ?? '');
     $description = sanitizeInput($_POST['description'] ?? '');

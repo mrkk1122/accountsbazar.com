@@ -54,4 +54,18 @@ CREATE TABLE IF NOT EXISTS email_queue (
     INDEX idx_created_at (created_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+-- Ensure products.image can store multiple image paths
+SET @img_type := (
+        SELECT LOWER(COLUMN_TYPE)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+            AND TABLE_NAME = 'products'
+            AND COLUMN_NAME = 'image'
+        LIMIT 1
+);
+SET @sql := IF(@img_type LIKE 'varchar(%)', 'ALTER TABLE products MODIFY COLUMN image TEXT NULL', 'SELECT 1');
+PREPARE stmt FROM @sql;
+EXECUTE stmt;
+DEALLOCATE PREPARE stmt;
+
 SET FOREIGN_KEY_CHECKS = 1;

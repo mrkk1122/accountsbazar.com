@@ -150,6 +150,33 @@ function adminUploadProductImages($files) {
     return $savedImages;
 }
 
+function ensureProductsImageColumnCapacity($conn) {
+    if (!$conn) {
+        return;
+    }
+
+    $result = @$conn->query("SHOW COLUMNS FROM `products` LIKE 'image'");
+    if (!$result) {
+        return;
+    }
+
+    $column = $result->fetch_assoc();
+    $result->free();
+    if (!$column) {
+        return;
+    }
+
+    $type = strtolower((string) ($column['Type'] ?? ''));
+    if (strpos($type, 'varchar(') === 0 && preg_match('/varchar\((\d+)\)/', $type, $m)) {
+        $length = (int) ($m[1] ?? 0);
+        if ($length > 0 && $length < 1024) {
+            @$conn->query("ALTER TABLE `products` MODIFY COLUMN `image` TEXT NULL");
+        }
+    }
+}
+
+ensureProductsImageColumnCapacity($conn);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
