@@ -456,9 +456,11 @@ require_once 'products/includes/seo.php';
                                 <div style="font-size:14px; color:#166534; margin-bottom:4px;">Order Number: <strong id="order-number-display"></strong></div>
                                 <div style="font-size:13px; color:#4ade80; margin-bottom:18px;">We will verify your payment and deliver shortly.</div>
                                 <div style="display:flex; justify-content:center; gap:10px; flex-wrap:wrap;">
+                                    <a id="order-whatsapp-link" href="#" target="_blank" rel="noopener noreferrer" style="display:inline-block; background:#16a34a; color:#fff; padding:10px 24px; border-radius:8px; font-weight:800; text-decoration:none;">Confirm on WhatsApp</a>
                                     <a href="profile.php" style="display:inline-block; background:#0f172a; color:#fff; padding:10px 24px; border-radius:8px; font-weight:800; text-decoration:none;">View My Orders</a>
                                     <a href="shop.php" style="display:inline-block; background:#e2e8f0; color:#0f172a; padding:10px 24px; border-radius:8px; font-weight:800; text-decoration:none;">Continue Shopping</a>
                                 </div>
+                                <div style="font-size:12px; color:#166534; margin-top:12px;">WhatsApp will open automatically with your order details.</div>
                             </div>
                         </div>
                     </div>
@@ -544,6 +546,43 @@ require_once 'products/includes/seo.php';
     <script>
     var appliedCouponCode = '';
     var checkoutAbandonedSent = false;
+    var adminWhatsAppNumber = '8801790088564';
+    var checkoutProductName = <?php echo json_encode((string) ($product['name'] ?? '')); ?>;
+    var checkoutPlanLabel = <?php echo json_encode((string) ($allowedPlans[$selectedPlan] ?? 'Standard')); ?>;
+    var checkoutImageUrl = <?php echo json_encode(!empty($imageSrc) ? (preg_match('/^https?:\/\//i', (string) $imageSrc) ? (string) $imageSrc : rtrim(APP_BASE_URL, '/') . '/' . ltrim((string) $imageSrc, '/')) : ''); ?>;
+
+    function buildAdminWhatsAppUrl(orderNumber, totalAmount) {
+        var customerName = (document.getElementById('customer-name').value || '').trim();
+        var customerPhone = (document.getElementById('customer-phone').value || '').trim();
+        var customerEmail = (document.getElementById('customer-email').value || '').trim();
+        var paymentMethod = (document.getElementById('selected-payment').value || '').trim();
+        var trxId = (document.getElementById('trx-id').value || '').trim();
+        var messageLines = [
+            'Assalamu Alaikum Admin,',
+            '',
+            'New order confirmation request from checkout:',
+            'Order Number: ' + orderNumber,
+            'Product: ' + checkoutProductName,
+            'Plan: ' + checkoutPlanLabel,
+            'Amount: BDT ' + totalAmount,
+            'Payment Method: ' + paymentMethod,
+            'TrxID: ' + trxId,
+            'Customer Name: ' + customerName,
+            'Customer Phone: ' + customerPhone,
+            'Customer Email: ' + customerEmail
+        ];
+
+        if (appliedCouponCode) {
+            messageLines.push('Coupon: ' + appliedCouponCode);
+        }
+        if (checkoutImageUrl) {
+            messageLines.push('Product Photo: ' + checkoutImageUrl);
+        }
+
+        messageLines.push('Please verify payment and deliver shortly.');
+
+        return 'https://wa.me/' + adminWhatsAppNumber + '?text=' + encodeURIComponent(messageLines.join('\n'));
+    }
 
     function copyNum(btn, num) {
         navigator.clipboard.writeText(num).then(function() {
@@ -655,6 +694,14 @@ require_once 'products/includes/seo.php';
                     document.getElementById('checkout-form').style.display = 'none';
                     document.getElementById('order-success-msg').style.display = 'block';
                     document.getElementById('order-number-display').textContent = res.order_number;
+                    var whatsappUrl = buildAdminWhatsAppUrl(res.order_number, res.total_amount || '<?php echo number_format((float)($checkoutPrice ?? 0), 2, '.', ''); ?>');
+                    var whatsappLink = document.getElementById('order-whatsapp-link');
+                    if (whatsappLink) {
+                        whatsappLink.href = whatsappUrl;
+                    }
+                    setTimeout(function() {
+                        window.location.href = whatsappUrl;
+                    }, 900);
                 } else {
                     alert('Error: ' + (res.message || 'Order failed.'));
                     btn.disabled = false;
