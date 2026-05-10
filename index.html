@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<meta name="description" content="AccountsBazar - Secure buy and sell marketplace for premium social, gaming, and business accounts.">
+	<title>AccountsBazar | Sell Market</title>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+	<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+	<div class="grain"></div>
+	<header class="site-header" id="top">
+		<div class="container nav-wrap">
+			<a href="#top" class="logo">Accounts<span>Bazar</span></a>
+			<button class="menu-toggle" aria-label="Open menu" aria-expanded="false">Menu</button>
+			<nav class="main-nav" id="mainNav">
+				<a href="#market">Market</a>
+				<a href="#categories">Categories</a>
+				<a href="#sellers">Sellers</a>
+				<a href="#trust">Trust</a>
+				<a href="#contact">Contact</a>
+			</nav>
+			<a href="#sell" class="btn btn-outline">Start Selling</a>
+		</div>
+	</header>
+
+	<main>
+		<section class="hero">
+			<div class="container hero-grid">
+				<div class="hero-text reveal">
+					<p class="eyebrow">Bangladesh's focused account marketplace</p>
+					<h1>Buy verified digital accounts. <span>Sell with confidence.</span></h1>
+					<p class="subtext">
+						Smart matching, escrow-safe checkout, real-time seller reputation, and a clean process designed for serious buyers and sellers.
+					</p>
+					<div class="hero-cta">
+						<a href="#market" class="btn btn-primary">Explore Market</a>
+						<a href="#sell" class="btn btn-light">Become a Seller</a>
+					</div>
+					<div class="stats">
+						<article>
+							<h3>48K+</h3>
+							<p>Active Listings</p>
+						</article>
+						<article>
+							<h3>99.2%</h3>
+							<p>Secure Delivery Rate</p>
+						</article>
+						<article>
+							<h3>12 min</h3>
+							<p>Average Deal Time</p>
+						</article>
+					</div>
+				</div>
+				<div class="hero-card reveal delay-1">
+					<h2>Live Sell Market Pulse</h2>
+					<ul>
+						<li><span>Facebook pages</span><strong>+17%</strong></li>
+						<li><span>Gaming IDs</span><strong>+11%</strong></li>
+						<li><span>Streaming channels</span><strong>+22%</strong></li>
+						<li><span>Business ad accounts</span><strong>+9%</strong></li>
+					</ul>
+					<p>Updated every 30 seconds based on buyer activity.</p>
+				</div>
+			</div>
+		</section>
+
+		<section class="search-strip" id="market">
+			<div class="container reveal">
+				<h2>Find your next account fast</h2>
+				<form class="search-box" id="searchForm">
+					<input type="text" id="searchInput" placeholder="Search by niche, platform, price range..." aria-label="Search listings">
+					<button type="submit" class="btn btn-primary">Search</button>
+				</form>
+			</div>
+		</section>
+
+		<section class="section" id="categories">
+			<div class="container">
+				<div class="section-head reveal">
+					<p class="eyebrow">Main sections</p>
+					<h2>Sell Market Categories</h2>
+				</div>
+				<div class="category-grid">
+					<article class="category reveal">
+						<h3>Social Growth</h3>
+						<p>Facebook pages, Instagram handles, TikTok profiles with real engagement history.</p>
+					</article>
+					<article class="category reveal delay-1">
+						<h3>Gaming Accounts</h3>
+						<p>Ranked IDs, premium skins, high-level profiles for serious players.</p>
+					</article>
+					<article class="category reveal delay-2">
+						<h3>Business Assets</h3>
+						<p>Ad managers, verified business profiles, and monetized digital assets.</p>
+					</article>
+					<article class="category reveal delay-3">
+						<h3>Content Channels</h3>
+						<p>YouTube and streaming channels with watch history and income potential.</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<section class="section featured">
+			<div class="container">
+				<div class="section-head reveal">
+					<p class="eyebrow">Hot picks</p>
+					<h2>Featured Listings</h2>
+				</div>
+				<div class="filter-bar reveal">
+					<button class="filter-btn active" data-filter="all">All</button>
+					<button class="filter-btn" data-filter="social">Social</button>
+					<button class="filter-btn" data-filter="gaming">Gaming</button>
+					<button class="filter-btn" data-filter="business">Business</button>
+				</div>
+				<p class="products-status" id="productsStatus">Loading products from database...</p>
+				<div class="listing-grid" id="listingGrid"></div>
+			</div>
+		</section>
+
+		<section class="section seller-zone" id="sellers">
+			<div class="container seller-grid">
+				<div class="reveal">
+					<p class="eyebrow">For sellers</p>
+					<h2>Launch your own account storefront</h2>
+					<p>Get better visibility, instant chat from qualified buyers, and secure payout milestones.</p>
+					<ul class="check-list">
+						<li>Smart pricing suggestions from live market data</li>
+						<li>Fraud-screening before buyer interaction</li>
+						<li>Escrow release only after verified handover</li>
+					</ul>
+					<a href="#contact" class="btn btn-primary" id="sell">Open Seller Panel</a>
+				</div>
+				<div class="seller-card reveal delay-1">
+					<h3>Seller Scoreboard</h3>
+					<div class="score-item"><span>Successful Deals</span><strong>1,284</strong></div>
+					<div class="score-item"><span>Avg. Rating</span><strong>4.9 / 5</strong></div>
+					<div class="score-item"><span>Repeat Buyers</span><strong>71%</strong></div>
+					<div class="score-item"><span>Avg. Payout Time</span><strong>18h</strong></div>
+				</div>
+			</div>
+		</section>
+
+		<section class="section trust" id="trust">
+			<div class="container">
+				<div class="section-head reveal">
+					<p class="eyebrow">Why AccountsBazar</p>
+					<h2>Built for trusted deals</h2>
+				</div>
+				<div class="trust-grid">
+					<article class="trust-card reveal">
+						<h3>Escrow Shield</h3>
+						<p>Payment stays protected until account transfer is confirmed by both sides.</p>
+					</article>
+					<article class="trust-card reveal delay-1">
+						<h3>Manual Verification</h3>
+						<p>High-value listings are checked by moderators before appearing in market.</p>
+					</article>
+					<article class="trust-card reveal delay-2">
+						<h3>Dispute Desk</h3>
+						<p>Dedicated support team with timeline tracking and evidence-based resolution.</p>
+					</article>
+				</div>
+			</div>
+		</section>
+
+		<section class="section testimonials">
+			<div class="container">
+				<div class="section-head reveal">
+					<p class="eyebrow">Community feedback</p>
+					<h2>What users are saying</h2>
+				</div>
+				<div class="testimonial-box reveal" id="testimonialBox">
+					<blockquote id="quoteText">"I sold three gaming IDs in one week with zero fake buyers. The process was smooth from listing to payout."</blockquote>
+					<p id="quoteAuthor">Rafiq Hasan, Seller</p>
+				</div>
+			</div>
+		</section>
+
+		<section class="section contact" id="contact">
+			<div class="container contact-grid">
+				<div class="reveal">
+					<p class="eyebrow">Let's connect</p>
+					<h2>Need custom buying or selling support?</h2>
+					<p>Tell us your target account type or listing goal. Our team will guide you with the fastest route.</p>
+				</div>
+				<form class="contact-form reveal delay-1">
+					<input type="text" placeholder="Your Name" required>
+					<input type="email" placeholder="Email Address" required>
+					<textarea rows="4" placeholder="What do you want to buy or sell?" required></textarea>
+					<button type="submit" class="btn btn-primary">Send Request</button>
+				</form>
+			</div>
+		</section>
+	</main>
+
+	<footer class="site-footer">
+		<div class="container foot-wrap">
+			<p>© 2026 AccountsBazar. Secure digital account marketplace.</p>
+			<div>
+				<a href="#top">Back to top</a>
+			</div>
+		</div>
+	</footer>
+
+	<script src="assets/js/main.js"></script>
+</body>
+</html>
