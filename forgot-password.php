@@ -6,11 +6,12 @@ require_once 'products/config/config.php';
 require_once 'products/includes/db.php';
 require_once 'products/includes/mailer.php';
 
-// ── Ensure the password_resets table exists ───────────────────────────────────
-try {
-    $setupDb   = new Database();
-    $setupConn = $setupDb->getConnection();
-    $setupConn->query(
+function ensurePasswordResetsTable($conn) {
+    if (!$conn) {
+        return false;
+    }
+
+    $queries = array(
         'CREATE TABLE IF NOT EXISTS `password_resets` (
             `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
             `email`      VARCHAR(255) NOT NULL,
@@ -18,8 +19,39 @@ try {
             `expires_at` DATETIME     NOT NULL,
             `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
             INDEX `idx_email` (`email`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci',
+        'CREATE TABLE IF NOT EXISTS `password_resets` (
+            `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            `email`      VARCHAR(255) NOT NULL,
+            `otp_code`   VARCHAR(6)   NOT NULL,
+            `expires_at` DATETIME     NOT NULL,
+            `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+            INDEX `idx_email` (`email`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8',
+        'CREATE TABLE IF NOT EXISTS `password_resets` (
+            `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+            `email`      VARCHAR(255) NOT NULL,
+            `otp_code`   VARCHAR(6)   NOT NULL,
+            `expires_at` DATETIME     NOT NULL,
+            `created_at` DATETIME,
+            INDEX `idx_email` (`email`)
+        ) ENGINE=InnoDB'
     );
+
+    foreach ($queries as $sql) {
+        if (@$conn->query($sql)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+// ── Ensure the password_resets table exists ───────────────────────────────────
+try {
+    $setupDb   = new Database();
+    $setupConn = $setupDb->getConnection();
+    ensurePasswordResetsTable($setupConn);
     $setupDb->closeConnection();
 } catch (Exception $e) {
     // Non-fatal; table may already exist.
@@ -174,16 +206,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     $error = 'Your account email is invalid. Please contact support.';
                 } else {
                     // Ensure password_resets table exists before querying it
-                    $conn->query(
-                        'CREATE TABLE IF NOT EXISTS `password_resets` (
-                            `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                            `email`      VARCHAR(255) NOT NULL,
-                            `otp_code`   VARCHAR(6)   NOT NULL,
-                            `expires_at` DATETIME     NOT NULL,
-                            `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                            INDEX `idx_email` (`email`)
-                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
-                    );
+                    if (!ensurePasswordResetsTable($conn)) {
+                        throw new RuntimeException('Could not create or access password_resets table');
+                    }
 
                     // Rate-limit: max 3 requests per 10 minutes per email
                     $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
@@ -305,7 +330,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             }
         } catch (Throwable $e) {
             error_log('[ForgotPassword/send_otp] ' . $e->getMessage());
-            $error = 'Something went wrong. Please try again.';
+            $error = 'Server setup issue while generating OTP. Please try again shortly.';
         }
     }
 }
@@ -321,6 +346,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
         try {
             $db   = new Database();
             $conn = $db->getConnection();
+
+            if (!ensurePasswordResetsTable($conn)) {
+                throw new RuntimeException('Could not create or access password_resets table');
+            }
 
             $chkStmt = $conn->prepare(
                 'SELECT id FROM password_resets WHERE email = ? AND otp_code = ? AND expires_at >= NOW() LIMIT 1'
