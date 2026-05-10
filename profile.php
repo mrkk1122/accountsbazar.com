@@ -9,6 +9,16 @@ if (empty($_SESSION['user_id'])) {
 require_once 'products/config/config.php';
 require_once 'products/includes/db.php';
 
+$profileError = '';
+$profileSuccess = '';
+$formValues = array(
+    'first_name' => '',
+    'last_name' => '',
+    'email' => '',
+    'phone' => ''
+);
+$isEditMode = isset($_GET['edit']);
+
 // Logout
 if (isset($_GET['logout'])) {
     session_destroy();
@@ -22,6 +32,42 @@ $orderStats = ['total' => 0, 'pending' => 0, 'delivered' => 0, 'processing' => 0
 try {
     $db   = new Database();
     $conn = $db->getConnection();
+
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'update_billing') {
+        $isEditMode = true;
+        $firstName = trim((string) ($_POST['first_name'] ?? ''));
+        $lastName  = trim((string) ($_POST['last_name'] ?? ''));
+        $email     = trim((string) ($_POST['email'] ?? ''));
+        $phone     = trim((string) ($_POST['phone'] ?? ''));
+
+        $formValues = array(
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'email' => $email,
+            'phone' => $phone
+        );
+
+        if ($firstName === '' || $email === '' || $phone === '') {
+            $profileError = 'First name, email and phone are required.';
+        } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            $profileError = 'Please enter a valid email address.';
+        } else {
+            $up = $conn->prepare('UPDATE users SET first_name = ?, last_name = ?, email = ?, phone = ? WHERE id = ? LIMIT 1');
+            $up->bind_param('ssssi', $firstName, $lastName, $email, $phone, $_SESSION['user_id']);
+
+            if ($up->execute()) {
+                $_SESSION['name'] = trim($firstName . ' ' . $lastName);
+                header('Location: profile.php?updated=1');
+                exit;
+            }
+
+            $profileError = ((int) $conn->errno === 1062)
+                ? 'This email is already in use by another account.'
+                : 'Could not update profile. Please try again.';
+            $up->close();
+        }
+    }
+
     $stmt = $conn->prepare('SELECT id, username, email, first_name, last_name, phone, user_type, created_at FROM users WHERE id = ? LIMIT 1');
     $stmt->bind_param('i', $_SESSION['user_id']);
     $stmt->execute();
@@ -52,6 +98,17 @@ try {
     $db->closeConnection();
 } catch (Exception $e) {
     $user = null;
+}
+
+if (isset($_GET['updated'])) {
+    $profileSuccess = 'Billing information updated successfully.';
+}
+
+if ($user && $formValues['first_name'] === '' && $formValues['last_name'] === '' && $formValues['email'] === '' && $formValues['phone'] === '') {
+    $formValues['first_name'] = (string) ($user['first_name'] ?? '');
+    $formValues['last_name'] = (string) ($user['last_name'] ?? '');
+    $formValues['email'] = (string) ($user['email'] ?? '');
+    $formValues['phone'] = (string) ($user['phone'] ?? '');
 }
 
 $displayName = $_SESSION['name'] ?? ($user['first_name'] ?? $user['username'] ?? 'User');
@@ -116,6 +173,64 @@ require_once 'products/includes/seo.php';
             transform: translateY(-1px);
             box-shadow: 0 4px 14px rgba(30, 64, 175, 0.22);
             outline: none;
+        }
+        .profile-flash {
+            width: 100%;
+            max-width: 480px;
+            margin-bottom: 12px;
+            border-radius: 12px;
+            padding: 10px 12px;
+            font-size: 13px;
+            font-weight: 700;
+        }
+        .profile-flash-success {
+            background: #ecfdf3;
+            border: 1px solid #86efac;
+            color: #166534;
+        }
+        .profile-flash-error {
+            background: #fff1f2;
+            border: 1px solid #fecdd3;
+            color: #be123c;
+        }
+        .profile-edit-form {
+            margin: 4px 0 22px;
+            display: grid;
+            gap: 10px;
+        }
+        .profile-edit-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+        .profile-edit-form label {
+            font-size: 12px;
+            font-weight: 700;
+            color: #475569;
+            margin-bottom: 4px;
+            display: inline-block;
+        }
+        .profile-edit-form input {
+            width: 100%;
+            border: 1px solid #cbd5e1;
+            border-radius: 9px;
+            font-size: 14px;
+            padding: 10px 11px;
+            color: #0f172a;
+            background: #fff;
+        }
+        .profile-edit-actions {
+            display: flex;
+            gap: 8px;
+            margin-top: 2px;
+        }
+        .profile-btn-secondary {
+            background: #f8fafc;
+            color: #334155;
+            border: 1px solid #e2e8f0;
+        }
+        .profile-btn-secondary:hover {
+            background: #eef2f7;
         }
         /* Order Stats */
         .order-stats-row {
@@ -267,6 +382,7 @@ require_once 'products/includes/seo.php';
         @media (max-width: 480px) {
             .profile-card { padding: 28px 16px 28px; }
             .order-stat-box { padding: 12px 6px; }
+            .profile-edit-grid { grid-template-columns: 1fr; }
         }
         .profile-avatar {
             width: 80px;
@@ -378,14 +494,53 @@ require_once 'products/includes/seo.php';
     </header>
 
     <div class="profile-page">
+        <?php if ($profileSuccess): ?>
+            <div class="profile-flash profile-flash-success"><?php echo htmlspecialchars($profileSuccess); ?></div>
+        <?php endif; ?>
+        <?php if ($profileError): ?>
+            <div class="profile-flash profile-flash-error"><?php echo htmlspecialchars($profileError); ?></div>
+        <?php endif; ?>
+
         <div class="profile-card">
             <?php if ($user): ?>
-                <a class="profile-edit-icon" href="profile.php" aria-label="Edit profile" title="Edit Profile">✎</a>
+                <a class="profile-edit-icon" href="profile.php?edit=1" aria-label="Edit billing info" title="Edit Billing Info">✎</a>
                 <div class="profile-avatar"><?php echo htmlspecialchars($initial); ?></div>
                 <div class="profile-name"><?php echo htmlspecialchars($displayName); ?></div>
                 <div class="profile-badge">
                     <span><?php echo htmlspecialchars($user['user_type'] ?? 'customer'); ?></span>
                 </div>
+
+                <?php if ($isEditMode): ?>
+                <form class="profile-edit-form" method="POST" action="profile.php?edit=1">
+                    <input type="hidden" name="action" value="update_billing">
+
+                    <div class="profile-edit-grid">
+                        <div>
+                            <label for="first-name">First Name</label>
+                            <input id="first-name" name="first_name" type="text" required value="<?php echo htmlspecialchars($formValues['first_name']); ?>">
+                        </div>
+                        <div>
+                            <label for="last-name">Last Name</label>
+                            <input id="last-name" name="last_name" type="text" value="<?php echo htmlspecialchars($formValues['last_name']); ?>">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label for="billing-email">Email</label>
+                        <input id="billing-email" name="email" type="email" required value="<?php echo htmlspecialchars($formValues['email']); ?>">
+                    </div>
+
+                    <div>
+                        <label for="billing-phone">Phone</label>
+                        <input id="billing-phone" name="phone" type="text" required value="<?php echo htmlspecialchars($formValues['phone']); ?>">
+                    </div>
+
+                    <div class="profile-edit-actions">
+                        <button type="submit" class="profile-btn profile-btn-shop">Save Billing Info</button>
+                        <a class="profile-btn profile-btn-secondary" href="profile.php">Cancel</a>
+                    </div>
+                </form>
+                <?php endif; ?>
 
                 <ul class="profile-info-list">
                     <li>
