@@ -31,7 +31,6 @@ env:
 
 jobs:
   build-and-deploy:
-    if: ${{ hashFiles('package.json') != '' && env.AZURE_FUNCTIONAPP_NAME != 'your-app-name' && secrets.AZURE_FUNCTIONAPP_PUBLISH_PROFILE != '' }}
     runs-on: windows-latest # For Linux, use ubuntu-latest
     environment: dev
     steps:
