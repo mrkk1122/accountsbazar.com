@@ -18,6 +18,18 @@ function smtpReadResponse($socket) {
     return $response;
 }
 
+function smtpGetStatusCode($response) {
+    return (int) substr((string) $response, 0, 3);
+}
+
+function smtpSendCommandWithResponse($socket, $command) {
+    if (fwrite($socket, $command . "\r\n") === false) {
+        return array(false, '');
+    }
+    $response = smtpReadResponse($socket);
+    return array(true, $response);
+}
+
 function smtpExpectCode($socket, $expectedCodes) {
     $response = smtpReadResponse($socket);
     $statusCode = (int) substr($response, 0, 3);
@@ -107,6 +119,7 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         $attempts++;
         $currentPort = $portConfigs[$configIndex]['port'];
         $currentEncryption = $portConfigs[$configIndex]['encryption'];
+        $lastSmtpResponse = '';
         
         $hostPrefix = $currentEncryption === 'ssl' ? 'ssl://' : '';
         $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . $currentPort;
@@ -149,7 +162,9 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
 
         stream_set_timeout($socket, MAIL_SEND_TIMEOUT);
 
-        if (!smtpExpectCode($socket, array(220))) {
+        $greeting = smtpReadResponse($socket);
+        $lastSmtpResponse = $greeting;
+        if (!in_array(smtpGetStatusCode($greeting), array(220), true)) {
             fclose($socket);
             if ($attempts >= $maxAttempts) {
                 logMailActivity($to, $subject, 'FAILED', 'No SMTP greeting');
@@ -163,8 +178,12 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
             $hostName = 'localhost';
         }
 
-        if (!smtpSendCommand($socket, 'EHLO ' . $hostName, array(250))) {
-            if (!smtpSendCommand($socket, 'HELO ' . $hostName, array(250))) {
+        list($ehloOk, $ehloResponse) = smtpSendCommandWithResponse($socket, 'EHLO ' . $hostName);
+        $lastSmtpResponse = $ehloResponse;
+        if (!$ehloOk || !in_array(smtpGetStatusCode($ehloResponse), array(250), true)) {
+            list($heloOk, $heloResponse) = smtpSendCommandWithResponse($socket, 'HELO ' . $hostName);
+            $lastSmtpResponse = $heloResponse;
+            if (!$heloOk || !in_array(smtpGetStatusCode($heloResponse), array(250), true)) {
                 fclose($socket);
                 if ($attempts >= $maxAttempts) {
                     logMailActivity($to, $subject, 'FAILED', 'EHLO/HELO failed');
@@ -174,28 +193,130 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
             }
         }
 
-        if (!smtpSendCommand($socket, 'AUTH LOGIN', array(334))
-            || !smtpSendCommand($socket, base64_encode($smtpUsername), array(334))
-            || !smtpSendCommand($socket, base64_encode($smtpPassword), array(235))) {
-            fclose($socket);
-            if ($attempts >= $maxAttempts) {
-                $debugMsg = 'Authentication failed | Username: ' . $smtpUsername . ' | Host: ' . MAIL_SMTP_HOST;
-                if (MAIL_DEBUG_MODE) {
-                    error_log('[smtpSendMail] ' . $debugMsg);
+        if ($currentEncryption === 'tls') {
+            list($startTlsWriteOk, $startTlsResponse) = smtpSendCommandWithResponse($socket, 'STARTTLS');
+            $lastSmtpResponse = $startTlsResponse;
+            if (!$startTlsWriteOk || !in_array(smtpGetStatusCode($startTlsResponse), array(220), true)) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'STARTTLS failed | Host: ' . MAIL_SMTP_HOST . ' | Port: ' . $currentPort . ' | SMTP: ' . trim($lastSmtpResponse);
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    return false;
                 }
-                logMailActivity($to, $subject, 'FAILED', $debugMsg);
-                return false;
+                continue;
             }
-            sleep(1);
-            continue;
+
+            $cryptoEnabled = @stream_socket_enable_crypto($socket, true, STREAM_CRYPTO_METHOD_TLS_CLIENT);
+            if ($cryptoEnabled !== true) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'TLS negotiation failed | Host: ' . MAIL_SMTP_HOST . ' | Port: ' . $currentPort;
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    return false;
+                }
+                continue;
+            }
+
+            list($ehloTlsOk, $ehloTlsResponse) = smtpSendCommandWithResponse($socket, 'EHLO ' . $hostName);
+            $lastSmtpResponse = $ehloTlsResponse;
+            if (!$ehloTlsOk || !in_array(smtpGetStatusCode($ehloTlsResponse), array(250), true)) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'EHLO after STARTTLS failed | SMTP: ' . trim($lastSmtpResponse);
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    return false;
+                }
+                continue;
+            }
         }
 
-        if (!smtpSendCommand($socket, 'MAIL FROM:<' . MAIL_FROM_ADDRESS . '>', array(250))
-            || !smtpSendCommand($socket, 'RCPT TO:<' . $to . '>', array(250, 251))
-            || !smtpSendCommand($socket, 'DATA', array(354))) {
+        if (MAIL_SMTP_AUTH) {
+            list($authOk, $authResponse) = smtpSendCommandWithResponse($socket, 'AUTH LOGIN');
+            $lastSmtpResponse = $authResponse;
+            if (!$authOk || !in_array(smtpGetStatusCode($authResponse), array(334), true)) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'AUTH LOGIN rejected | Username: ' . $smtpUsername . ' | Host: ' . MAIL_SMTP_HOST . ' | SMTP: ' . trim($lastSmtpResponse);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    return false;
+                }
+                sleep(1);
+                continue;
+            }
+
+            list($userOk, $userResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpUsername));
+            $lastSmtpResponse = $userResponse;
+            if (!$userOk || !in_array(smtpGetStatusCode($userResponse), array(334), true)) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'SMTP username rejected | Username: ' . $smtpUsername . ' | SMTP: ' . trim($lastSmtpResponse);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    return false;
+                }
+                sleep(1);
+                continue;
+            }
+
+            list($passOk, $passResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpPassword));
+            $lastSmtpResponse = $passResponse;
+            if (!$passOk || !in_array(smtpGetStatusCode($passResponse), array(235), true)) {
+                fclose($socket);
+                if ($attempts >= $maxAttempts) {
+                    $debugMsg = 'SMTP password rejected | Username: ' . $smtpUsername . ' | SMTP: ' . trim($lastSmtpResponse);
+                    if (MAIL_DEBUG_MODE) {
+                        error_log('[smtpSendMail] ' . $debugMsg);
+                    }
+                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
+                    return false;
+                }
+                sleep(1);
+                continue;
+            }
+        }
+
+        $envelopeFrom = $smtpUsername;
+        list($mailFromOk, $mailFromResponse) = smtpSendCommandWithResponse($socket, 'MAIL FROM:<' . $envelopeFrom . '>');
+        $lastSmtpResponse = $mailFromResponse;
+        if ((!$mailFromOk || !in_array(smtpGetStatusCode($mailFromResponse), array(250), true)) && MAIL_FROM_ADDRESS !== $envelopeFrom) {
+            $envelopeFrom = MAIL_FROM_ADDRESS;
+            list($mailFromOk, $mailFromResponse) = smtpSendCommandWithResponse($socket, 'MAIL FROM:<' . $envelopeFrom . '>');
+            $lastSmtpResponse = $mailFromResponse;
+        }
+
+        $rcptOk = false;
+        $dataOk = false;
+        $rcptResponse = '';
+        $dataResponse = '';
+        if ($mailFromOk && in_array(smtpGetStatusCode($mailFromResponse), array(250), true)) {
+            list($rcptOk, $rcptResponse) = smtpSendCommandWithResponse($socket, 'RCPT TO:<' . $to . '>');
+            $lastSmtpResponse = $rcptResponse;
+            if ($rcptOk && in_array(smtpGetStatusCode($rcptResponse), array(250, 251), true)) {
+                list($dataOk, $dataResponse) = smtpSendCommandWithResponse($socket, 'DATA');
+                $lastSmtpResponse = $dataResponse;
+            }
+        }
+
+        if (!$mailFromOk || !in_array(smtpGetStatusCode($mailFromResponse), array(250), true)
+            || !$rcptOk || !in_array(smtpGetStatusCode($rcptResponse), array(250, 251), true)
+            || !$dataOk || !in_array(smtpGetStatusCode($dataResponse), array(354), true)) {
             fclose($socket);
             if ($attempts >= $maxAttempts) {
-                $debugMsg = 'MAIL FROM/RCPT TO failed | From: ' . MAIL_FROM_ADDRESS . ' | To: ' . $to;
+                $debugMsg = 'MAIL FROM/RCPT TO failed | From: ' . $envelopeFrom . ' | To: ' . $to . ' | SMTP: ' . trim($lastSmtpResponse);
                 if (MAIL_DEBUG_MODE) {
                     error_log('[smtpSendMail] ' . $debugMsg);
                 }

@@ -167,23 +167,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
                     $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
 
-                    // Store OTP info in session for debugging if mail fails
-                    if (!$sentNow) {
-                        $_SESSION['fp_otp_code'] = $otp;
-                    }
-
                     if (!$mailQueued) {
                         $error = 'Could not queue OTP email. Please try again or contact support.';
+                    } elseif (!$sentNow) {
+                        $error = 'OTP email could not be delivered right now. Please try again after 1-2 minutes.';
+                        $_SESSION['fp_step'] = 'email';
+                        $step = 'email';
                     } else {
                         $_SESSION['fp_step']   = 'otp';
                         $_SESSION['fp_email']  = $email;
                         $_SESSION['fp_otp_ok'] = false;
                         $step    = 'otp';
-                        if ($sentNow) {
-                            $success = 'OTP sent to ' . htmlspecialchars($email) . '. Check your inbox (and spam folder).';
-                        } else {
-                            $success = 'OTP request accepted. Email is queued and will arrive shortly.';
-                        }
+                        $success = 'OTP sent to ' . htmlspecialchars($email) . '. Check your inbox (and spam folder).';
                     }
                 }
             }
