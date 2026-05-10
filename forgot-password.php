@@ -257,9 +257,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $phpMailSent = false;
                         if (!$smtpSent && !((int) ($queueResult['sent'] ?? 0) > 0)) {
                             $headers = "From: Accounts Bazar <" . MAIL_FROM_ADDRESS . ">\r\n";
+                            $headers .= "Reply-To: " . MAIL_REPLY_TO . "\r\n";
                             $headers .= "MIME-Version: 1.0\r\n";
                             $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-                            $phpMailSent = @mail($email, $subject, $htmlBody, $headers);
+                            $mailParams = '';
+                            if (defined('MAIL_FROM_ADDRESS') && filter_var(MAIL_FROM_ADDRESS, FILTER_VALIDATE_EMAIL)) {
+                                $mailParams = '-f' . MAIL_FROM_ADDRESS;
+                            }
+                            $phpMailSent = $mailParams !== ''
+                                ? @mail($email, $subject, $htmlBody, $headers, $mailParams)
+                                : @mail($email, $subject, $htmlBody, $headers);
                             if ($phpMailSent) {
                                 logMailActivity($email, $subject, 'SUCCESS', 'Sent via PHP mail() fallback');
                             }
@@ -278,18 +285,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
                         $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
 
-                        if (!$mailQueued) {
-                            $error = 'Could not queue OTP email. Please try again or contact support.';
-                        } elseif (!$sentNow) {
-                            $error = 'OTP email could not be delivered right now. Please try again after 1-2 minutes.';
-                            $_SESSION['fp_step'] = 'email';
-                            $step = 'email';
-                        } else {
+                        if ($sentNow) {
                             $_SESSION['fp_step']   = 'otp';
                             $_SESSION['fp_email']  = $email;
                             $_SESSION['fp_otp_ok'] = false;
                             $step    = 'otp';
                             $success = 'OTP sent to ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Check your inbox (and spam folder).';
+                        } elseif (!$mailQueued) {
+                            $error = 'OTP email could not be sent or queued. Please contact support.';
+                            $_SESSION['fp_step'] = 'email';
+                            $step = 'email';
+                        } else {
+                            $error = 'OTP email could not be delivered right now. Please try again after 1-2 minutes.';
+                            $_SESSION['fp_step'] = 'email';
+                            $step = 'email';
                         }
                     }
                 }
