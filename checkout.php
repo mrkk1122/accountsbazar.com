@@ -87,12 +87,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
     $email      = trim((string) ($_POST['address'] ?? ''));
     $payMethod  = trim((string) ($_POST['payment_method'] ?? ''));
     $trxId      = trim((string) ($_POST['trx_id'] ?? ''));
-    $deliveryDate   = trim((string) ($_POST['delivery_date'] ?? 'today'));
-    $deliveryWindow = trim((string) ($_POST['delivery_window'] ?? '10am-1pm'));
-    $occasion       = trim((string) ($_POST['occasion'] ?? 'General'));
-    $bouquetColor   = trim((string) ($_POST['bouquet_color'] ?? 'Mixed'));
-    $bouquetTheme   = trim((string) ($_POST['bouquet_theme'] ?? 'Classic'));
-    $cardMessage    = trim((string) ($_POST['card_message'] ?? ''));
     $couponCode     = strtoupper(trim((string) ($_POST['coupon_code'] ?? '')));
 
     if (!$pid || !$fullName || !$phone || !$email || !$payMethod || !$trxId) {
@@ -107,20 +101,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 
     $allowedPlans = ['1-month'=>'1 Month','2-month'=>'2 Month','6-month'=>'6 Month','lifetime'=>'Life Time'];
     $planMultiplier = ['1-month' => 1, '2-month' => 2, '6-month' => 6, 'lifetime' => 12];
-    $allowedWindows = ['10am-1pm', '1pm-5pm', '5pm-9pm'];
-    $validOccasions = ['Birthday','Anniversary','Sorry','Love','Congratulations','General'];
     $coupons = ['FLOWER10' => 10, 'LOVE15' => 15, 'WELCOME5' => 5];
 
     if (!isset($allowedPlans[$plan])) {
         $plan = '1-month';
     }
-    if (!in_array($deliveryWindow, $allowedWindows, true)) {
-        $deliveryWindow = '10am-1pm';
-    }
-    if (!in_array($occasion, $validOccasions, true)) {
-        $occasion = 'General';
-    }
-
     try {
         $db   = new Database();
         $conn = $db->getConnection();
@@ -151,16 +136,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
 
         $orderNum  = 'ORD-' . strtoupper(substr(md5(uniqid('', true)), 0, 8));
 
-        $deliveryLabel = $deliveryDate === 'tomorrow' ? 'Tomorrow' : 'Today';
         $shippAddr = "Name: $fullName | Phone: $phone | Email: $email | Plan: {$allowedPlans[$plan]}\n";
-        $shippAddr .= "Delivery: {$deliveryLabel} ({$deliveryWindow}) | Occasion: {$occasion}";
+        $shippAddr .= 'Delivery: Standard';
 
         $notes  = "Payment: $payMethod | TrxID: $trxId\n";
-        $notes .= "Bouquet Color: $bouquetColor | Theme: $bouquetTheme\n";
         $notes .= "Coupon: " . ($couponCode !== '' ? $couponCode : 'N/A') . " | Discount: " . number_format($discountAmount, 2) . "\n";
-        if ($cardMessage !== '') {
-            $notes .= "Card Message: " . $cardMessage;
-        }
 
         $ins = $conn->prepare(
             'INSERT INTO orders (order_number, user_id, total_amount, status, payment_method, payment_status, shipping_address, notes)
@@ -185,8 +165,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && !empty($_SERVER['HTTP_X_REQUESTED_W
             $mailContent .= '<li><strong>Order Number:</strong> ' . htmlspecialchars($orderNum, ENT_QUOTES, 'UTF-8') . '</li>';
             $mailContent .= '<li><strong>Product:</strong> ' . htmlspecialchars((string) $prod['name'], ENT_QUOTES, 'UTF-8') . '</li>';
             $mailContent .= '<li><strong>Plan:</strong> ' . htmlspecialchars($allowedPlans[$plan], ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>Occasion:</strong> ' . htmlspecialchars($occasion, ENT_QUOTES, 'UTF-8') . '</li>';
-            $mailContent .= '<li><strong>Delivery:</strong> ' . htmlspecialchars($deliveryLabel . ' (' . $deliveryWindow . ')', ENT_QUOTES, 'UTF-8') . '</li>';
+            $mailContent .= '<li><strong>Delivery:</strong> Standard</li>';
             $mailContent .= '<li><strong>Subtotal:</strong> BDT ' . number_format($subtotal, 2) . '</li>';
             $mailContent .= '<li><strong>Discount:</strong> BDT ' . number_format($discountAmount, 2) . '</li>';
             $mailContent .= '<li><strong>Final Total:</strong> BDT ' . number_format($price, 2) . '</li>';
@@ -366,61 +345,6 @@ require_once 'products/includes/seo.php';
                                 <div class="review-form-row">
                                     <label for="customer-email">Email</label>
                                     <input id="customer-email" type="email" required placeholder="Enter your email" value="<?php echo htmlspecialchars($billingAddress); ?>">
-                                </div>
-
-                                <div class="review-form-row">
-                                    <label for="delivery-date">Delivery Date</label>
-                                    <select id="delivery-date" name="delivery_date">
-                                        <option value="today">Today</option>
-                                        <option value="tomorrow">Tomorrow</option>
-                                    </select>
-                                </div>
-                                <div class="review-form-row">
-                                    <label for="delivery-window">Delivery Time Window</label>
-                                    <select id="delivery-window" name="delivery_window">
-                                        <option value="10am-1pm">10AM - 1PM</option>
-                                        <option value="1pm-5pm">1PM - 5PM</option>
-                                        <option value="5pm-9pm">5PM - 9PM</option>
-                                    </select>
-                                </div>
-
-                                <div class="review-form-row">
-                                    <label for="occasion-template">Occasion Template</label>
-                                    <select id="occasion-template" name="occasion" onchange="applyOccasionTemplate()">
-                                        <option value="General">General</option>
-                                        <option value="Birthday">Birthday</option>
-                                        <option value="Anniversary">Anniversary</option>
-                                        <option value="Sorry">Sorry</option>
-                                        <option value="Love">Love</option>
-                                        <option value="Congratulations">Congratulations</option>
-                                    </select>
-                                </div>
-
-                                <div class="review-form-row review-form-row-half">
-                                    <div>
-                                        <label for="bouquet-color">Bouquet Color</label>
-                                        <select id="bouquet-color" name="bouquet_color">
-                                            <option value="Mixed">Mixed</option>
-                                            <option value="Red">Red</option>
-                                            <option value="White">White</option>
-                                            <option value="Pink">Pink</option>
-                                            <option value="Yellow">Yellow</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label for="bouquet-theme">Bouquet Theme</label>
-                                        <select id="bouquet-theme" name="bouquet_theme">
-                                            <option value="Classic">Classic</option>
-                                            <option value="Elegant">Elegant</option>
-                                            <option value="Romantic">Romantic</option>
-                                            <option value="Luxury">Luxury</option>
-                                        </select>
-                                    </div>
-                                </div>
-
-                                <div class="review-form-row">
-                                    <label for="card-message">Card Message (Optional)</label>
-                                    <textarea id="card-message" name="card_message" rows="3" maxlength="250" placeholder="Write a short message for the flower card..."></textarea>
                                 </div>
 
                                 <div class="review-form-row review-form-row-half">
@@ -651,39 +575,6 @@ require_once 'products/includes/seo.php';
         });
     }
 
-    function applyOccasionTemplate() {
-        var occasion = document.getElementById('occasion-template').value;
-        var card = document.getElementById('card-message');
-        var color = document.getElementById('bouquet-color');
-        var theme = document.getElementById('bouquet-theme');
-
-        var templates = {
-            'Birthday': 'Happy Birthday! Wishing you joy, smiles, and beautiful moments.',
-            'Anniversary': 'Happy Anniversary! Wishing you a lifetime of love and happiness.',
-            'Sorry': 'I am truly sorry. Please accept these flowers as a small apology.',
-            'Love': 'You are special to me. Sending love and warm wishes.',
-            'Congratulations': 'Congratulations on your achievement! So proud of you.',
-            'General': ''
-        };
-
-        var palettes = {
-            'Birthday': ['Yellow', 'Elegant'],
-            'Anniversary': ['Red', 'Romantic'],
-            'Sorry': ['White', 'Classic'],
-            'Love': ['Red', 'Romantic'],
-            'Congratulations': ['Mixed', 'Luxury'],
-            'General': ['Mixed', 'Classic']
-        };
-
-        if (card && templates[occasion]) {
-            card.value = templates[occasion];
-        }
-        if (color && theme && palettes[occasion]) {
-            color.value = palettes[occasion][0];
-            theme.value = palettes[occasion][1];
-        }
-    }
-
     function applyCoupon() {
         var couponInput = document.getElementById('coupon-code');
         var hint = document.getElementById('coupon-hint');
@@ -748,12 +639,6 @@ require_once 'products/includes/seo.php';
         fd.append('name', document.getElementById('customer-name').value);
         fd.append('phone', document.getElementById('customer-phone').value);
         fd.append('address', document.getElementById('customer-email').value);
-        fd.append('delivery_date', document.getElementById('delivery-date').value);
-        fd.append('delivery_window', document.getElementById('delivery-window').value);
-        fd.append('occasion', document.getElementById('occasion-template').value);
-        fd.append('bouquet_color', document.getElementById('bouquet-color').value);
-        fd.append('bouquet_theme', document.getElementById('bouquet-theme').value);
-        fd.append('card_message', document.getElementById('card-message').value);
         fd.append('coupon_code', appliedCouponCode);
         fd.append('payment_method', method);
         fd.append('trx_id', trx);

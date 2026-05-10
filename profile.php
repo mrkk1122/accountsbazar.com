@@ -90,6 +90,32 @@ require_once 'products/includes/seo.php';
             padding: 40px 36px 36px;
             width: 100%;
             max-width: 480px;
+            position: relative;
+        }
+        .profile-edit-icon {
+            position: absolute;
+            top: 14px;
+            right: 14px;
+            width: 34px;
+            height: 34px;
+            border-radius: 50%;
+            border: 1px solid #dbeafe;
+            background: #eff6ff;
+            color: #1d4ed8;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 15px;
+            text-decoration: none;
+            box-shadow: 0 2px 8px rgba(30, 64, 175, 0.16);
+            transition: transform 0.18s ease, background-color 0.18s ease, box-shadow 0.18s ease;
+        }
+        .profile-edit-icon:hover,
+        .profile-edit-icon:focus-visible {
+            background: #dbeafe;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 14px rgba(30, 64, 175, 0.22);
+            outline: none;
         }
         /* Order Stats */
         .order-stats-row {
@@ -354,6 +380,7 @@ require_once 'products/includes/seo.php';
     <div class="profile-page">
         <div class="profile-card">
             <?php if ($user): ?>
+                <a class="profile-edit-icon" href="profile.php" aria-label="Edit profile" title="Edit Profile">✎</a>
                 <div class="profile-avatar"><?php echo htmlspecialchars($initial); ?></div>
                 <div class="profile-name"><?php echo htmlspecialchars($displayName); ?></div>
                 <div class="profile-badge">
