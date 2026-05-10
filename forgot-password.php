@@ -129,6 +129,24 @@ function stmtFetchAssocRow($stmt) {
     return null;
 }
 
+function usersColumnExists($conn, $columnName) {
+    if (!$conn) {
+        return false;
+    }
+
+    $sql = 'SHOW COLUMNS FROM users LIKE ?';
+    $stmt = $conn->prepare($sql);
+    if (!$stmt) {
+        return false;
+    }
+    $stmt->bind_param('s', $columnName);
+    $stmt->execute();
+    $row = stmtFetchAssocRow($stmt);
+    $stmt->close();
+
+    return !empty($row);
+}
+
 function maskEmailAddress($email) {
     $email = (string) $email;
     $atPos = strpos($email, '@');
@@ -170,29 +188,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             $db   = new Database();
             $conn = $db->getConnection();
 
+            $hasIsActive = usersColumnExists($conn, 'is_active');
+            $hasPhone = usersColumnExists($conn, 'phone');
+            $selectColumns = 'id, email';
+            if ($hasIsActive) {
+                $selectColumns .= ', is_active';
+            }
+            if ($hasPhone) {
+                $selectColumns .= ', phone';
+            }
+
             // Check user exists
             if ($isEmailInput) {
-                $userStmt = $conn->prepare('SELECT id, email, is_active, phone FROM users WHERE email = ? LIMIT 1');
+                $userStmt = $conn->prepare('SELECT ' . $selectColumns . ' FROM users WHERE email = ? LIMIT 1');
             } else {
+                if (!$hasPhone) {
+                    $error = 'Phone-based recovery is unavailable. Please use your account email.';
+                    $db->closeConnection();
+                    $userStmt = null;
+                }
                 $phoneLast10 = lastPhoneDigits($phoneDigits, 10);
-                $userStmt = $conn->prepare(
-                    'SELECT id, email, is_active, phone FROM users
-                     WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", "") = ?
-                        OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", ""), 10) = ?
-                     LIMIT 1'
-                );
+                if ($error === '') {
+                    $userStmt = $conn->prepare(
+                        'SELECT ' . $selectColumns . ' FROM users
+                         WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", "") = ?
+                            OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", ""), 10) = ?
+                         LIMIT 1'
+                    );
+                }
             }
-            if (!$userStmt) {
+            if ($error !== '') {
+                $userRow = null;
+            } elseif (!$userStmt) {
                 throw new RuntimeException('DB prepare failed (find user): ' . $conn->error);
-            }
-            if ($isEmailInput) {
-                $userStmt->bind_param('s', $email);
             } else {
-                $userStmt->bind_param('ss', $phoneDigits, $phoneLast10);
+                if ($isEmailInput) {
+                    $userStmt->bind_param('s', $email);
+                } else {
+                    $userStmt->bind_param('ss', $phoneDigits, $phoneLast10);
+                }
+                $userStmt->execute();
+                $userRow = stmtFetchAssocRow($userStmt);
+                $userStmt->close();
             }
-            $userStmt->execute();
-            $userRow = stmtFetchAssocRow($userStmt);
-            $userStmt->close();
 
             if (!$userRow) {
                 $error = $isEmailInput
