@@ -3,6 +3,110 @@ session_start();
 require_once 'products/config/config.php';
 require_once 'products/includes/db.php';
 
+function shopStmtFetchAssocRow($stmt) {
+    if (!$stmt) {
+        return null;
+    }
+
+    if (method_exists($stmt, 'get_result')) {
+        $result = $stmt->get_result();
+        if ($result instanceof mysqli_result) {
+            $row = $result->fetch_assoc();
+            return $row ?: null;
+        }
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        return null;
+    }
+
+    $fields = array();
+    $bindVars = array();
+    while ($field = $meta->fetch_field()) {
+        $fields[$field->name] = null;
+        $bindVars[] = &$fields[$field->name];
+    }
+    $meta->free();
+
+    if (empty($bindVars)) {
+        return null;
+    }
+
+    call_user_func_array(array($stmt, 'bind_result'), $bindVars);
+    if (!$stmt->fetch()) {
+        return null;
+    }
+
+    $row = array();
+    foreach ($fields as $key => $value) {
+        $row[$key] = $value;
+    }
+
+    return $row;
+}
+
+function shopStmtFetchAllRows($stmt) {
+    $rows = array();
+    if (!$stmt) {
+        return $rows;
+    }
+
+    if (method_exists($stmt, 'get_result')) {
+        $result = $stmt->get_result();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+            return $rows;
+        }
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        return $rows;
+    }
+
+    $fields = array();
+    $bindVars = array();
+    while ($field = $meta->fetch_field()) {
+        $fields[$field->name] = null;
+        $bindVars[] = &$fields[$field->name];
+    }
+    $meta->free();
+
+    if (empty($bindVars)) {
+        return $rows;
+    }
+
+    call_user_func_array(array($stmt, 'bind_result'), $bindVars);
+    while ($stmt->fetch()) {
+        $row = array();
+        foreach ($fields as $key => $value) {
+            $row[$key] = $value;
+        }
+        $rows[] = $row;
+    }
+
+    return $rows;
+}
+
+function shopColumnExists($conn, $table, $column) {
+    if (!$conn) {
+        return false;
+    }
+
+    $safeTable = $conn->real_escape_string((string) $table);
+    $safeColumn = $conn->real_escape_string((string) $column);
+    $res = $conn->query("SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'");
+    if (!$res) {
+        return false;
+    }
+    $row = $res->fetch_assoc();
+    $res->free();
+    return !empty($row);
+}
+
 $products = array();
 $searchQuery = trim($_GET['q'] ?? '');
 $perPage = 20;
@@ -15,23 +119,48 @@ try {
     $db = new Database();
     $conn = $db->getConnection();
 
+    $hasCategory = shopColumnExists($conn, 'products', 'category');
+    $hasSku = shopColumnExists($conn, 'products', 'sku');
+    $searchClauses = array('name LIKE ?', 'description LIKE ?');
+    if ($hasCategory) {
+        $searchClauses[] = 'category LIKE ?';
+    }
+    if ($hasSku) {
+        $searchClauses[] = 'sku LIKE ?';
+    }
+    $searchWhere = implode(' OR ', $searchClauses);
+
     if ($searchQuery !== '') {
-        $countSql = 'SELECT COUNT(*) AS total FROM products WHERE quantity >= 0 AND (name LIKE ? OR description LIKE ?)';
+        $countSql = 'SELECT COUNT(*) AS total FROM products WHERE quantity >= 0 AND (' . $searchWhere . ')';
         $countStmt = $conn->prepare($countSql);
         $searchTerm = '%' . $searchQuery . '%';
-        $countStmt->bind_param('ss', $searchTerm, $searchTerm);
+        $countTypes = str_repeat('s', count($searchClauses));
+        $countParams = array_fill(0, count($searchClauses), $searchTerm);
+        $countBind = array_merge(array($countTypes), $countParams);
+        $countRefs = array();
+        foreach ($countBind as $k => $v) {
+            $countRefs[$k] = &$countBind[$k];
+        }
+        call_user_func_array(array($countStmt, 'bind_param'), $countRefs);
         $countStmt->execute();
-        $countResult = $countStmt->get_result();
-        if ($countResult && ($countRow = $countResult->fetch_assoc())) {
+        $countRow = shopStmtFetchAssocRow($countStmt);
+        if ($countRow) {
             $totalProducts = (int) $countRow['total'];
         }
         $countStmt->close();
 
-        $sql = 'SELECT id, name, description, price, image, created_at FROM products WHERE quantity >= 0 AND (name LIKE ? OR description LIKE ?) ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
+        $sql = 'SELECT id, name, description, price, image, created_at FROM products WHERE quantity >= 0 AND (' . $searchWhere . ') ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?';
         $stmt = $conn->prepare($sql);
-        $stmt->bind_param('ssii', $searchTerm, $searchTerm, $perPage, $offset);
+        $dataTypes = str_repeat('s', count($searchClauses)) . 'ii';
+        $dataParams = array_fill(0, count($searchClauses), $searchTerm);
+        $dataBind = array_merge(array($dataTypes), $dataParams, array($perPage, $offset));
+        $dataRefs = array();
+        foreach ($dataBind as $k => $v) {
+            $dataRefs[$k] = &$dataBind[$k];
+        }
+        call_user_func_array(array($stmt, 'bind_param'), $dataRefs);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $products = shopStmtFetchAllRows($stmt);
     } else {
         $countResult = $conn->query('SELECT COUNT(*) AS total FROM products WHERE quantity >= 0');
         if ($countResult && ($countRow = $countResult->fetch_assoc())) {
@@ -42,7 +171,7 @@ try {
         $stmt = $conn->prepare($sql);
         $stmt->bind_param('ii', $perPage, $offset);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $products = shopStmtFetchAllRows($stmt);
     }
 
     $totalPages = max(1, (int) ceil($totalProducts / $perPage));
@@ -50,18 +179,12 @@ try {
         $page = $totalPages;
     }
 
-    if ($result) {
-        while ($row = $result->fetch_assoc()) {
-            $products[] = $row;
-        }
-    }
-
     if (isset($stmt)) {
         $stmt->close();
     }
 
     $db->closeConnection();
-} catch (Exception $e) {
+} catch (Throwable $e) {
     $products = array();
 }
 ?>
