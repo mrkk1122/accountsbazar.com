@@ -220,7 +220,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             if ($error !== '') {
                 $userRow = null;
             } elseif (!$userStmt) {
-                throw new RuntimeException('DB prepare failed (find user): ' . $conn->error);
+                error_log('[ForgotPassword/send_otp] DB prepare failed (find user): ' . $conn->error);
+                $error = 'Unable to process account lookup right now. Please try again.';
             } else {
                 if ($isEmailInput) {
                     $userStmt->bind_param('s', $email);
@@ -250,15 +251,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
                         $rateStmt = $conn->prepare($rateSql);
                         if (!$rateStmt) {
-                            throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
-                        }
-                        $rateStmt->bind_param('s', $email);
-                        $rateStmt->execute();
-                        $rateRow  = stmtFetchAssocRow($rateStmt);
-                        $rateStmt->close();
+                            error_log('[ForgotPassword/send_otp] DB prepare failed (rate-limit): ' . $conn->error);
+                        } else {
+                            $rateStmt->bind_param('s', $email);
+                            $rateStmt->execute();
+                            $rateRow  = stmtFetchAssocRow($rateStmt);
+                            $rateStmt->close();
 
-                        if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
-                            $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
+                            if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
+                                $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
+                            }
                         }
                     } else {
                         $nowTs = time();
@@ -344,7 +346,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         // Process a few queued jobs immediately so OTP can arrive
                         // even when cron is not yet configured.
                         // Try processing queue immediately (including previously failed pending rows).
-                        $queueResult = processEmailQueue($conn, 10);
+                        try {
+                            $queueResult = processEmailQueue($conn, 10);
+                        } catch (Throwable $qe) {
+                            error_log('[ForgotPassword/send_otp] processEmailQueue failed: ' . $qe->getMessage());
+                            $queueResult = array('queued' => 0, 'sent' => 0);
+                        }
 
                         // If SMTP failed, try PHP mail() as fallback
                         $phpMailSent = false;
@@ -406,7 +413,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             }
         } catch (Throwable $e) {
             error_log('[ForgotPassword/send_otp] ' . $e->getMessage());
-            $error = 'Could not process OTP request. Please try again.';
+            if (defined('MAIL_DEBUG_MODE') && MAIL_DEBUG_MODE === true) {
+                $error = 'Could not process OTP request: ' . $e->getMessage();
+            } else {
+                $error = 'Could not process OTP request. Please try again.';
+            }
         }
     }
 }
