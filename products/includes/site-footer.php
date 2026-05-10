@@ -26,7 +26,6 @@
             </div>
 
             <div class="footer-section">
-                <h4 class="footer-heading">Premium Services</h4>
                 <ul class="footer-links">
                     <li><a href="shop.php?q=YouTube+Premium">YouTube Premium Bangladesh</a></li>
                     <li><a href="shop.php?q=CapCut+Premium">CapCut Premium Subscription</a></li>
@@ -37,7 +36,6 @@
             </div>
 
             <div class="footer-section">
-                <h4 class="footer-heading">Popular Links</h4>
                 <ul class="footer-links">
                     <li><a href="index.php">Home</a></li>
                     <li><a href="shop.php">All Premium Accounts</a></li>
@@ -68,11 +66,6 @@
                         <img src="images/rocket-color-logo-mobile-banking-icon-free-png.webp" alt="Rocket payment" class="pay-logo-img">
                     </div>
                 </div>
-                <ul class="footer-links footer-trust-list">
-                    <li>Instant delivery for available premium subscriptions</li>
-                    <li>Manual support for login, replacement, and setup help</li>
-                    <li>Bangladesh-focused pricing for digital premium tools</li>
-                </ul>
             </div>
         </div>
         <div class="footer-bottom">
