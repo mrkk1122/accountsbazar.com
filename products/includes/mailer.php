@@ -95,45 +95,53 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
 
     $attempts = 0;
     $maxAttempts = MAIL_RETRY_ATTEMPTS;
+    
+    // Try both primary and alternate port/encryption
+    $portConfigs = array(
+        array('port' => MAIL_SMTP_PORT, 'encryption' => MAIL_SMTP_ENCRYPTION),
+        array('port' => (defined('MAIL_SMTP_ALT_PORT') ? MAIL_SMTP_ALT_PORT : 587), 'encryption' => (defined('MAIL_SMTP_ALT_ENCRYPTION') ? MAIL_SMTP_ALT_ENCRYPTION : 'tls'))
+    );
+    $configIndex = 0;
 
     while ($attempts < $maxAttempts) {
         $attempts++;
+        $currentPort = $portConfigs[$configIndex]['port'];
+        $currentEncryption = $portConfigs[$configIndex]['encryption'];
         
-        $hostPrefix = MAIL_SMTP_ENCRYPTION === 'ssl' ? 'ssl://' : '';
-        $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . MAIL_SMTP_PORT;
+        $hostPrefix = $currentEncryption === 'ssl' ? 'ssl://' : '';
+        $remoteSocket = $hostPrefix . MAIL_SMTP_HOST . ':' . $currentPort;
         $socket = false;
         $errno = 0;
         $errstr = '';
 
-        if (MAIL_SMTP_ENCRYPTION === 'ssl') {
+        if ($currentEncryption === 'ssl') {
             $sslContext = stream_context_create(array(
                 'ssl' => array(
-                    'verify_peer' => true,
-                    'verify_peer_name' => true,
-                    'allow_self_signed' => false,
+                    'verify_peer' => false,
+                    'verify_peer_name' => false,
+                    'allow_self_signed' => true,
                 )
             ));
             $socket = @stream_socket_client($remoteSocket, $errno, $errstr, MAIL_SEND_TIMEOUT, STREAM_CLIENT_CONNECT, $sslContext);
-
-            if (!$socket) {
-                $sslContextRelaxed = stream_context_create(array(
-                    'ssl' => array(
-                        'verify_peer' => false,
-                        'verify_peer_name' => false,
-                        'allow_self_signed' => true,
-                    )
-                ));
-                $socket = @stream_socket_client($remoteSocket, $errno, $errstr, MAIL_SEND_TIMEOUT, STREAM_CLIENT_CONNECT, $sslContextRelaxed);
-            }
         } else {
             $socket = @stream_socket_client($remoteSocket, $errno, $errstr, MAIL_SEND_TIMEOUT, STREAM_CLIENT_CONNECT);
         }
         
         if (!$socket) {
+            // Try next port config if available
+            if ($configIndex < count($portConfigs) - 1) {
+                $configIndex++;
+                $attempts = 0; // Reset attempts for new config
+                continue;
+            }
+            
             if ($attempts >= $maxAttempts) {
-                $error = "Connection failed (attempt $attempts/$maxAttempts): $errstr";
+                $error = "Connection failed (attempt $attempts/$maxAttempts on all ports): $errstr";
                 logMailActivity($to, $subject, 'FAILED', $error);
-                return false;
+                if (MAIL_DEBUG_MODE) {
+                    error_log('[smtpSendMail] ' . $error);
+                }
+                break; // Exit loop to try fallback
             }
             sleep(1); // Wait before retry
             continue;
