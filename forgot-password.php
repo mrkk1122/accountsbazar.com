@@ -582,6 +582,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                 }
                 $chkStmt->close();
 
+                // Fallback query without NOW() to avoid DB timezone/collation edge cases on shared hosting.
+                if (!$chkRow) {
+                    $latestStmt = $conn->prepare(
+                        'SELECT id, expires_at FROM password_resets WHERE email = ? AND otp_code = ? ORDER BY id DESC LIMIT 1'
+                    );
+                    if ($latestStmt) {
+                        $latestStmt->bind_param('ss', $email, $otp);
+                        try {
+                            $latestStmt->execute();
+                            $latestRow = stmtFetchAssocRow($latestStmt);
+                            if ($latestRow && !empty($latestRow['expires_at'])) {
+                                $expiresTs = strtotime((string) $latestRow['expires_at']);
+                                if ($expiresTs !== false && $expiresTs >= time()) {
+                                    $chkRow = array('id' => $latestRow['id']);
+                                }
+                            }
+                        } catch (Throwable $latestEx) {
+                            error_log('[ForgotPassword/verify_otp] latest-row fallback failed: ' . $latestEx->getMessage());
+                        }
+                        $latestStmt->close();
+                    }
+                }
+
                 if (!$chkRow) {
                     // Fallback to session storage if DB lookup fails
                     $sessionOtp = (string) ($_SESSION['fp_otp_code'] ?? '');
