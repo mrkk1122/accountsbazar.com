@@ -573,22 +573,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     throw new RuntimeException('DB prepare failed (verify OTP): ' . $conn->error);
                 }
                 $chkStmt->bind_param('ss', $email, $otp);
-                $chkStmt->execute();
-                $chkRow = stmtFetchAssocRow($chkStmt);
+                try {
+                    $chkStmt->execute();
+                    $chkRow = stmtFetchAssocRow($chkStmt);
+                } catch (Throwable $verifyEx) {
+                    error_log('[ForgotPassword/verify_otp] DB execute failed: ' . $verifyEx->getMessage());
+                    $chkRow = null;
+                }
                 $chkStmt->close();
-                $db->closeConnection();
 
                 if (!$chkRow) {
-                    $error = 'Invalid or expired OTP. Please check the code or request a new one.';
+                    // Fallback to session storage if DB lookup fails
+                    $sessionOtp = (string) ($_SESSION['fp_otp_code'] ?? '');
+                    $sessionEmail = (string) ($_SESSION['fp_otp_email'] ?? '');
+                    $sessionExpires = (int) ($_SESSION['fp_otp_expires'] ?? 0);
+
+                    if ($sessionOtp !== '' && $sessionEmail !== '' && $sessionExpires > time() && strcasecmp($sessionEmail, $email) === 0 && $sessionOtp === $otp) {
+                        $_SESSION['fp_step']   = 'reset';
+                        $_SESSION['fp_otp_ok'] = true;
+                        $step = 'reset';
+                    } else {
+                        $error = 'Invalid or expired OTP. Please check the code or request a new one.';
+                    }
                 } else {
                     $_SESSION['fp_step']   = 'reset';
                     $_SESSION['fp_otp_ok'] = true;
                     $step = 'reset';
                 }
+                $db->closeConnection();
             }
         } catch (Throwable $e) {
             error_log('[ForgotPassword/verify_otp] ' . $e->getMessage());
-            $error = 'Something went wrong. Please try again.';
+            if (defined('MAIL_DEBUG_MODE') && MAIL_DEBUG_MODE === true) {
+                $error = 'OTP verification failed: ' . $e->getMessage();
+            } else {
+                $error = 'Something went wrong. Please try again.';
+            }
         }
     }
 }
