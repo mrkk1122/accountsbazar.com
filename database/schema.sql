@@ -1,4 +1,4 @@
-CREATE DATABASE IF NOT EXISTS accountsbazar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+]633;E;printf "CREATE DATABASE IF NOT EXISTS accountsbazar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci\x3b\\nUSE accountsbazar\x3b\\n\\n";91d5e20a-7683-457c-9548-0c988d1f21c2]633;CCREATE DATABASE IF NOT EXISTS accountsbazar CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE accountsbazar;
 
 SET NAMES utf8mb4;
@@ -176,7 +176,9 @@ CREATE TABLE IF NOT EXISTS password_resets (
     otp_code VARCHAR(6) NOT NULL,
     expires_at DATETIME NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_email (email)
+    INDEX idx_email (email),
+    INDEX idx_expires_at (expires_at),
+    INDEX idx_email_otp (email, otp_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS email_queue (
