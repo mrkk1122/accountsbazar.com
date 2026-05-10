@@ -5,6 +5,17 @@
  */
 
 if (!function_exists('mailConfigEnvValue')) {
+	function mailConfigWrappedInQuotes($value) {
+		$value = (string) $value;
+		$len = strlen($value);
+		if ($len < 2) {
+			return false;
+		}
+		$first = $value[0];
+		$last = $value[$len - 1];
+		return (($first === '"' && $last === '"') || ($first === "'" && $last === "'"));
+	}
+
 	function mailConfigEnvValue($key, $default = '') {
 		$raw = getenv((string) $key);
 		if ($raw === false) {
@@ -17,7 +28,7 @@ if (!function_exists('mailConfigEnvValue')) {
 		}
 
 		// Remove accidental wrapping quotes from hosting panel values.
-		if ((str_starts_with($value, '"') && str_ends_with($value, '"')) || (str_starts_with($value, "'") && str_ends_with($value, "'"))) {
+		if (mailConfigWrappedInQuotes($value)) {
 			$value = substr($value, 1, -1);
 			$value = trim((string) $value);
 		}
