@@ -44,6 +44,15 @@ function normalizePhoneNumber($value) {
     return preg_replace('/\D+/', '', (string) $value);
 }
 
+function lastPhoneDigits($digits, $length = 10) {
+    $digits = (string) $digits;
+    $length = (int) $length;
+    if ($length <= 0) {
+        return $digits;
+    }
+    return strlen($digits) > $length ? substr($digits, -$length) : $digits;
+}
+
 function maskEmailAddress($email) {
     $email = (string) $email;
     $atPos = strpos($email, '@');
@@ -89,9 +98,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             if ($isEmailInput) {
                 $userStmt = $conn->prepare('SELECT id, email, is_active, phone FROM users WHERE email = ? LIMIT 1');
             } else {
+                $phoneLast10 = lastPhoneDigits($phoneDigits, 10);
                 $userStmt = $conn->prepare(
                     'SELECT id, email, is_active, phone FROM users
                      WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", "") = ?
+                        OR RIGHT(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", ""), 10) = ?
                      LIMIT 1'
                 );
             }
@@ -101,7 +112,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             if ($isEmailInput) {
                 $userStmt->bind_param('s', $email);
             } else {
-                $userStmt->bind_param('s', $phoneDigits);
+                $userStmt->bind_param('ss', $phoneDigits, $phoneLast10);
             }
             $userStmt->execute();
             $userRow = $userStmt->get_result()->fetch_assoc();
@@ -167,7 +178,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $insStmt->close();
 
                         // Build OTP email
-                        $subject  = 'Accounts Bazar – Password Reset OTP';
+                        $subject  = 'Accounts Bazar - Password Reset OTP';
                         $body  = "Hello,\r\n\r\n";
                         $body .= "We received a request to reset the password for your Accounts Bazar account.\r\n\r\n";
                         $body .= "Your One-Time Password (OTP) is:\r\n\r\n";
