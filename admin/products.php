@@ -56,7 +56,9 @@ function adminConvertImageToWebp($sourcePath, $targetPath, $quality = 84) {
     } elseif ($mime === 'image/png') {
         $image = @imagecreatefrompng($sourcePath);
         if ($image) {
-            imagepalettetotruecolor($image);
+            if (function_exists('imagepalettetotruecolor')) {
+                imagepalettetotruecolor($image);
+            }
             imagealphablending($image, true);
             imagesavealpha($image, true);
         }
@@ -88,6 +90,7 @@ function adminUploadProductImages($files) {
     }
 
     $allowedMime = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp');
+    $allowedExt = array('jpg', 'jpeg', 'png', 'gif', 'webp');
     $total = count($files['name']);
 
     for ($i = 0; $i < $total; $i++) {
@@ -99,8 +102,29 @@ function adminUploadProductImages($files) {
             continue;
         }
 
-        $mime = (string) (@mime_content_type($tmpName) ?: '');
-        if ($mime !== '' && !in_array(strtolower($mime), $allowedMime, true)) {
+        $mime = '';
+        if (function_exists('mime_content_type')) {
+            $mime = (string) @mime_content_type($tmpName);
+        } elseif (function_exists('finfo_open')) {
+            $finfo = @finfo_open(FILEINFO_MIME_TYPE);
+            if ($finfo) {
+                $mime = (string) @finfo_file($finfo, $tmpName);
+                @finfo_close($finfo);
+            }
+        } else {
+            $imgInfo = @getimagesize($tmpName);
+            if (is_array($imgInfo) && !empty($imgInfo['mime'])) {
+                $mime = (string) $imgInfo['mime'];
+            }
+        }
+
+        $mime = strtolower(trim((string) $mime));
+        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
+
+        if ($mime !== '' && !in_array($mime, $allowedMime, true)) {
+            continue;
+        }
+        if ($mime === '' && !in_array($ext, $allowedExt, true)) {
             continue;
         }
 
