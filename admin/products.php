@@ -16,6 +16,116 @@ $message = '';
 $error = '';
 $editingProduct = null;
 
+function normalizeProductImagePath($path) {
+    $path = ltrim(trim((string) $path), '/');
+    if (strpos($path, 'products/') === 0) {
+        $path = substr($path, 9);
+    }
+    return $path;
+}
+
+function parseProductImageList($imageValue) {
+    $parts = array_values(array_filter(array_map('trim', explode(',', (string) $imageValue))));
+    $normalized = array();
+
+    foreach ($parts as $part) {
+        $item = normalizeProductImagePath($part);
+        if ($item !== '') {
+            $normalized[] = $item;
+        }
+    }
+
+    return array_values(array_unique($normalized));
+}
+
+function adminConvertImageToWebp($sourcePath, $targetPath, $quality = 84) {
+    if (!function_exists('imagewebp')) {
+        return false;
+    }
+
+    $info = @getimagesize($sourcePath);
+    if (!$info || empty($info['mime'])) {
+        return false;
+    }
+
+    $mime = strtolower((string) $info['mime']);
+    $image = null;
+
+    if ($mime === 'image/jpeg' || $mime === 'image/jpg') {
+        $image = @imagecreatefromjpeg($sourcePath);
+    } elseif ($mime === 'image/png') {
+        $image = @imagecreatefrompng($sourcePath);
+        if ($image) {
+            imagepalettetotruecolor($image);
+            imagealphablending($image, true);
+            imagesavealpha($image, true);
+        }
+    } elseif ($mime === 'image/gif') {
+        $image = @imagecreatefromgif($sourcePath);
+    } elseif ($mime === 'image/webp') {
+        return false;
+    }
+
+    if (!$image) {
+        return false;
+    }
+
+    $ok = imagewebp($image, $targetPath, $quality);
+    imagedestroy($image);
+    return $ok;
+}
+
+function adminUploadProductImages($files) {
+    $savedImages = array();
+
+    if (!isset($files['name']) || !is_array($files['name'])) {
+        return $savedImages;
+    }
+
+    $targetDir = defined('UPLOAD_DIR') ? UPLOAD_DIR : (__DIR__ . '/../products/images/');
+    if (!is_dir($targetDir)) {
+        @mkdir($targetDir, 0777, true);
+    }
+
+    $allowedMime = array('image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp');
+    $total = count($files['name']);
+
+    for ($i = 0; $i < $total; $i++) {
+        $originalName = basename((string) ($files['name'][$i] ?? ''));
+        $tmpName = (string) ($files['tmp_name'][$i] ?? '');
+        $errorCode = (int) ($files['error'][$i] ?? UPLOAD_ERR_NO_FILE);
+
+        if ($originalName === '' || $tmpName === '' || $errorCode !== UPLOAD_ERR_OK) {
+            continue;
+        }
+
+        $mime = (string) (@mime_content_type($tmpName) ?: '');
+        if ($mime !== '' && !in_array(strtolower($mime), $allowedMime, true)) {
+            continue;
+        }
+
+        $safeName = preg_replace('/[^A-Za-z0-9._-]/', '_', $originalName);
+        $savedName = time() . '_' . mt_rand(1000, 9999) . '_' . $i . '_' . $safeName;
+        $targetFile = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . $savedName;
+
+        if (!move_uploaded_file($tmpName, $targetFile)) {
+            continue;
+        }
+
+        $webpName = preg_replace('/\.[a-zA-Z0-9]+$/', '', $savedName) . '.webp';
+        $webpPath = rtrim($targetDir, '/\\') . DIRECTORY_SEPARATOR . $webpName;
+
+        if (adminConvertImageToWebp($targetFile, $webpPath)) {
+            @unlink($targetFile);
+            $savedImages[] = 'images/' . $webpName;
+        } else {
+            $savedImages[] = 'images/' . $savedName;
+        }
+    }
+
+    return $savedImages;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -124,12 +234,59 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($id <= 0 || $name === '' || $price <= 0 || $quantity < 0) {
             $error = 'Please provide valid product information.';
         } else {
-            $stmt = $conn->prepare('UPDATE products SET name = ?, price = ?, quantity = ?, description = ? WHERE id = ?');
-            $stmt->bind_param('sdisi', $name, $price, $quantity, $description, $id);
+            $oldImageValue = '';
+            $imgStmt = $conn->prepare('SELECT image FROM products WHERE id = ? LIMIT 1');
+            if ($imgStmt) {
+                $imgStmt->bind_param('i', $id);
+                $imgStmt->execute();
+                $imgStmt->bind_result($oldImageValue);
+                $imgStmt->fetch();
+                $imgStmt->close();
+            }
+
+            $existingImages = parseProductImageList($oldImageValue);
+            $removeCandidates = isset($_POST['remove_images']) && is_array($_POST['remove_images']) ? $_POST['remove_images'] : array();
+            $removeImages = array();
+
+            foreach ($removeCandidates as $candidate) {
+                $normalized = normalizeProductImagePath($candidate);
+                if ($normalized !== '' && in_array($normalized, $existingImages, true)) {
+                    $removeImages[] = $normalized;
+                }
+            }
+
+            $removeImages = array_values(array_unique($removeImages));
+            $keptImages = array_values(array_filter($existingImages, function ($img) use ($removeImages) {
+                return !in_array($img, $removeImages, true);
+            }));
+
+            $newImages = array();
+            if (isset($_FILES['new_images']) && is_array($_FILES['new_images']['name'] ?? null)) {
+                $newImages = adminUploadProductImages($_FILES['new_images']);
+            }
+
+            $finalImages = array_values(array_unique(array_merge($keptImages, $newImages)));
+            $finalImageValue = implode(',', $finalImages);
+
+            $stmt = $conn->prepare('UPDATE products SET name = ?, price = ?, quantity = ?, description = ?, image = ? WHERE id = ?');
+            $stmt->bind_param('sdissi', $name, $price, $quantity, $description, $finalImageValue, $id);
 
             if ($stmt->execute()) {
                 $message = 'Product updated successfully.';
+
+                foreach ($removeImages as $removedImage) {
+                    $fullPath = __DIR__ . '/../products/' . $removedImage;
+                    if (is_file($fullPath)) {
+                        @unlink($fullPath);
+                    }
+                }
             } else {
+                foreach ($newImages as $newImage) {
+                    $newPath = __DIR__ . '/../products/' . $newImage;
+                    if (is_file($newPath)) {
+                        @unlink($newPath);
+                    }
+                }
                 $error = 'Failed to update product.';
             }
             $stmt->close();
@@ -140,7 +297,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 if (isset($_GET['edit_id'])) {
     $editId = (int) $_GET['edit_id'];
     if ($editId > 0) {
-        $stmt = $conn->prepare('SELECT id, name, description, price, quantity FROM products WHERE id = ? LIMIT 1');
+        $stmt = $conn->prepare('SELECT id, name, description, price, quantity, image FROM products WHERE id = ? LIMIT 1');
         $stmt->bind_param('i', $editId);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -217,6 +374,38 @@ if ($conn) {
         .full-col {
             grid-column: 1 / -1;
         }
+        .existing-images {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 12px;
+        }
+        .existing-image-item {
+            border: 1px solid #e5e7eb;
+            border-radius: 10px;
+            padding: 8px;
+            background: #f8fafc;
+        }
+        .existing-image-item img {
+            width: 100%;
+            height: 86px;
+            object-fit: cover;
+            border-radius: 8px;
+            display: block;
+            margin-bottom: 8px;
+        }
+        .image-remove-label {
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            font-size: 12px;
+            color: #334155;
+            margin: 0;
+        }
+        .image-help {
+            font-size: 12px;
+            color: #64748b;
+            margin-top: 6px;
+        }
         .action-inline {
             display: inline-block;
             margin: 0;
@@ -269,10 +458,12 @@ if ($conn) {
                 <?php endif; ?>
 
                 <?php if ($editingProduct): ?>
-                    <form class="edit-form" method="POST">
+                    <form class="edit-form" method="POST" enctype="multipart/form-data">
                         <h3 style="margin-bottom: 10px;">Edit Product #<?php echo (int) $editingProduct['id']; ?></h3>
                         <input type="hidden" name="action" value="update">
                         <input type="hidden" name="id" value="<?php echo (int) $editingProduct['id']; ?>">
+
+                        <?php $editingImages = parseProductImageList($editingProduct['image'] ?? ''); ?>
 
                         <div class="edit-grid">
                             <div>
@@ -290,6 +481,32 @@ if ($conn) {
                             <div class="full-col">
                                 <label for="description">Description</label>
                                 <textarea id="description" name="description"><?php echo htmlspecialchars((string) $editingProduct['description']); ?></textarea>
+                            </div>
+
+                            <div class="full-col">
+                                <label>Existing Photos</label>
+                                <?php if (!empty($editingImages)): ?>
+                                    <div class="existing-images">
+                                        <?php foreach ($editingImages as $imgPath): ?>
+                                            <?php $publicPath = '../products/' . ltrim($imgPath, '/'); ?>
+                                            <div class="existing-image-item">
+                                                <img src="<?php echo htmlspecialchars($publicPath); ?>" alt="Product photo">
+                                                <label class="image-remove-label">
+                                                    <input type="checkbox" name="remove_images[]" value="<?php echo htmlspecialchars($imgPath); ?>">
+                                                    Remove
+                                                </label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                <?php else: ?>
+                                    <p class="image-help">No photos found for this product.</p>
+                                <?php endif; ?>
+                            </div>
+
+                            <div class="full-col">
+                                <label for="new_images">Add New Photos</label>
+                                <input id="new_images" name="new_images[]" type="file" accept="image/*" multiple>
+                                <p class="image-help">You can upload multiple images. Selected remove items will be deleted after successful save.</p>
                             </div>
                         </div>
 
