@@ -337,13 +337,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
                         // Always queue as backup for cron-based retry
                         $mailQueued = enqueueEmail($conn, $email, $subject, $htmlBody);
+                        if (!$mailQueued) {
+                            error_log('[ForgotPassword/send_otp] enqueueEmail failed for ' . $email . ' | DB error: ' . $conn->error);
+                        }
 
                         // Process a few queued jobs immediately so OTP can arrive
                         // even when cron is not yet configured.
-                        $queueResult = array('queued' => 0, 'sent' => 0);
-                        if ($mailQueued) {
-                            $queueResult = processEmailQueue($conn, 10);
-                        }
+                        // Try processing queue immediately (including previously failed pending rows).
+                        $queueResult = processEmailQueue($conn, 10);
 
                         // If SMTP failed, try PHP mail() as fallback
                         $phpMailSent = false;
@@ -377,13 +378,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
                         $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
                         $queuedForRetry = $mailQueued && !$sentNow;
+                        $allowDebugOtp = (defined('MAIL_DEBUG_MODE') && MAIL_DEBUG_MODE === true && !$sentNow && !$mailQueued);
 
-                        if ($sentNow || $queuedForRetry) {
+                        if ($sentNow || $queuedForRetry || $allowDebugOtp) {
                             $_SESSION['fp_step']   = 'otp';
                             $_SESSION['fp_email']  = $email;
                             $_SESSION['fp_otp_ok'] = false;
                             $step    = 'otp';
-                            if ($queuedForRetry) {
+                            if ($allowDebugOtp) {
+                                $success = 'Mail delivery failed on server. Debug OTP: ' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '. Use this code now and fix SMTP settings from hosting panel.';
+                            } elseif ($queuedForRetry) {
                                 $success = 'OTP request accepted for ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Delivery may take 1-2 minutes, then enter the code.';
                             } else {
                                 $success = 'OTP sent to ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Check your inbox (and spam folder).';
