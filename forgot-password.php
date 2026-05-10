@@ -53,6 +53,50 @@ function lastPhoneDigits($digits, $length = 10) {
     return strlen($digits) > $length ? substr($digits, -$length) : $digits;
 }
 
+function stmtFetchAssocRow($stmt) {
+    if (method_exists($stmt, 'get_result')) {
+        $result = $stmt->get_result();
+        if ($result === false) {
+            return null;
+        }
+        $row = $result->fetch_assoc();
+        $result->free();
+        return $row ?: null;
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        return null;
+    }
+
+    $fields = array();
+    $row = array();
+    $bindParams = array();
+
+    while ($field = $meta->fetch_field()) {
+        $fields[] = $field->name;
+        $row[$field->name] = null;
+        $bindParams[] = &$row[$field->name];
+    }
+    $meta->free();
+
+    if (!empty($bindParams)) {
+        call_user_func_array(array($stmt, 'bind_result'), $bindParams);
+    }
+
+    if ($stmt->fetch()) {
+        $out = array();
+        foreach ($fields as $fieldName) {
+            $out[$fieldName] = $row[$fieldName];
+        }
+        $stmt->free_result();
+        return $out;
+    }
+
+    $stmt->free_result();
+    return null;
+}
+
 function maskEmailAddress($email) {
     $email = (string) $email;
     $atPos = strpos($email, '@');
@@ -115,7 +159,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                 $userStmt->bind_param('ss', $phoneDigits, $phoneLast10);
             }
             $userStmt->execute();
-            $userRow = $userStmt->get_result()->fetch_assoc();
+            $userRow = stmtFetchAssocRow($userStmt);
             $userStmt->close();
 
             if (!$userRow) {
@@ -149,7 +193,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                     }
                     $rateStmt->bind_param('s', $email);
                     $rateStmt->execute();
-                    $rateRow  = $rateStmt->get_result()->fetch_assoc();
+                    $rateRow  = stmtFetchAssocRow($rateStmt);
                     $rateStmt->close();
 
                     if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
@@ -277,7 +321,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             }
             $chkStmt->bind_param('ss', $email, $otp);
             $chkStmt->execute();
-            $chkRow = $chkStmt->get_result()->fetch_assoc();
+            $chkRow = stmtFetchAssocRow($chkStmt);
             $chkStmt->close();
             $db->closeConnection();
 
