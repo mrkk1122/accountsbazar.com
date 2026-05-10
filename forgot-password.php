@@ -376,13 +376,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $db->closeConnection();
 
                         $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
+                        $queuedForRetry = $mailQueued && !$sentNow;
 
-                        if ($sentNow) {
+                        if ($sentNow || $queuedForRetry) {
                             $_SESSION['fp_step']   = 'otp';
                             $_SESSION['fp_email']  = $email;
                             $_SESSION['fp_otp_ok'] = false;
                             $step    = 'otp';
-                            $success = 'OTP sent to ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Check your inbox (and spam folder).';
+                            if ($queuedForRetry) {
+                                $success = 'OTP request accepted for ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Delivery may take 1-2 minutes, then enter the code.';
+                            } else {
+                                $success = 'OTP sent to ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Check your inbox (and spam folder).';
+                            }
                         } elseif (!$mailQueued) {
                             $error = 'OTP email could not be sent or queued. Please contact support.';
                             $_SESSION['fp_step'] = 'email';
