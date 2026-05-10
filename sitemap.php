@@ -191,6 +191,8 @@ function sitemapOpenConnection() {
 
 $urls = array();
 $defaultImage = $baseUrl . '/images/logo.png';
+$totalProducts = 0;
+$productsPerPage = 20;
 
 $staticPages = array(
     array(
@@ -226,16 +228,24 @@ $staticPages = array(
         'image_title' => 'AI Prompt Marketplace'
     ),
     array(
-        'loc' => $baseUrl . '/login.php',
-        'file' => __DIR__ . '/login.php',
-        'changefreq' => 'monthly',
-        'priority' => '0.4'
+        'loc' => $baseUrl . '/product-details.php',
+        'file' => __DIR__ . '/product-details.php',
+        'changefreq' => 'weekly',
+        'priority' => '0.85',
+        'image' => $defaultImage,
+        'image_title' => 'Premium Product Details'
     ),
     array(
-        'loc' => $baseUrl . '/register.php',
-        'file' => __DIR__ . '/register.php',
+        'loc' => $baseUrl . '/forgot-password.php',
+        'file' => __DIR__ . '/forgot-password.php',
         'changefreq' => 'monthly',
-        'priority' => '0.4'
+        'priority' => '0.3'
+    ),
+    array(
+        'loc' => $baseUrl . '/sitemap.xml',
+        'file' => __DIR__ . '/sitemap.xml',
+        'changefreq' => 'daily',
+        'priority' => '0.2'
     )
 );
 
@@ -249,6 +259,12 @@ try {
     $conn = sitemapOpenConnection();
 
     if ($conn) {
+        $countSql = 'SELECT COUNT(*) AS total FROM products WHERE quantity >= 0';
+        $countRes = $conn->query($countSql);
+        if ($countRes && ($countRow = $countRes->fetch_assoc())) {
+            $totalProducts = (int) ($countRow['total'] ?? 0);
+        }
+
         $sql = 'SELECT id, name, image, created_at, updated_at FROM products WHERE quantity >= 0 ORDER BY id DESC';
         $res = $conn->query($sql);
 
@@ -271,11 +287,36 @@ try {
             }
         }
 
+        $totalPages = (int) ceil($totalProducts / $productsPerPage);
+        if ($totalPages > 1) {
+            for ($p = 2; $p <= $totalPages; $p++) {
+                addSitemapUrl($urls, array(
+                    'loc' => $baseUrl . '/shop.php?page=' . $p,
+                    'changefreq' => 'daily',
+                    'priority' => '0.75',
+                    'lastmod' => gmdate('Y-m-d'),
+                    'image' => $defaultImage,
+                    'image_title' => 'Premium Digital Accounts Shop - Page ' . $p
+                ));
+
+                addSitemapUrl($urls, array(
+                    'loc' => $baseUrl . '/offer-products.php?page=' . $p,
+                    'changefreq' => 'daily',
+                    'priority' => '0.7',
+                    'lastmod' => gmdate('Y-m-d'),
+                    'image' => $defaultImage,
+                    'image_title' => 'Premium Subscription Offers - Page ' . $p
+                ));
+            }
+        }
+
         $conn->close();
     }
 } catch (Throwable $e) {
     // Keep static URLs in sitemap even if DB is unavailable.
 }
+
+ksort($urls);
 
 echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n";
 echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:image="http://www.google.com/schemas/sitemap-image/1.1">' . "\n";

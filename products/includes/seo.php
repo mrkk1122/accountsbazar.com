@@ -120,6 +120,7 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
     <meta name="ab-webpush-public-key" content="<?php echo htmlspecialchars((string) WEBPUSH_PUBLIC_KEY, ENT_QUOTES, 'UTF-8'); ?>">
     <?php endif; ?>
     <link rel="canonical" href="<?php echo $safeCanonical; ?>">
+    <link rel="sitemap" type="application/xml" title="Sitemap" href="https://accountsbazar.com/sitemap.xml">
     <link rel="alternate" hreflang="bn-BD" href="<?php echo $safeCanonical; ?>">
     <link rel="alternate" hreflang="x-default" href="<?php echo $safeCanonical; ?>">
 
@@ -157,6 +158,7 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
         {
             "@context": "https://schema.org",
             "@type": ["Organization", "OnlineStore"],
+            "@id": "https://accountsbazar.com/#organization",
             "name": "<?php echo $safeSiteName; ?>",
             "url": "<?php echo $safeSiteUrl; ?>",
             "logo": {
@@ -194,9 +196,13 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
         {
             "@context": "https://schema.org",
             "@type": "WebSite",
+            "@id": "https://accountsbazar.com/#website",
             "name": "<?php echo $safeSiteName; ?>",
             "url": "<?php echo $safeSiteUrl; ?>",
             "inLanguage": "bn-BD",
+            "publisher": {
+                "@id": "https://accountsbazar.com/#organization"
+            },
             "potentialAction": {
                 "@type": "SearchAction",
                 "target": {
@@ -219,6 +225,7 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
             'dateModified' => gmdate('Y-m-d'),
             'isPartOf' => array(
                 '@type' => 'WebSite',
+                '@id' => 'https://accountsbazar.com/#website',
                 'name' => 'Accounts Bazar',
                 'url' => 'https://accountsbazar.com/'
             ),

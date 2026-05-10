@@ -41,9 +41,5 @@
                 </div>
             </div>
         </div>
-        <div class="footer-bottom">
-            <p>&copy; 2026 <strong>Accounts Bazar</strong>. Premium subscriptions, AI tools, and digital account deals in Bangladesh.</p>
-            <p>Search, compare, and buy YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, and ChatGPT Premium.</p>
-        </div>
     </div>
 </footer>

@@ -14,6 +14,7 @@ Disallow: /profile.php
 Disallow: /admin/
 
 # Internal API endpoints
+Disallow: /api/
 Disallow: /admin/api/
 Disallow: /products/api/
 
@@ -26,4 +27,3 @@ Disallow: /notifications-feed.php
 
 # Sitemaps
 Sitemap: https://accountsbazar.com/sitemap.xml
-Sitemap: https://accountsbazar.com/sitemap.php

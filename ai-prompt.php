@@ -440,8 +440,7 @@ require_once 'products/includes/seo.php';
     <main class="prompt-wrap">
         <section class="prompt-card">
             <h1 class="prompt-title">AI Prompt Page</h1>
-            <p class="prompt-subtitle">Admin panel থেকে upload করা prompt ও photo এখানে newest first দেখাবে।</p>
-
+            <p class="prompt-subtitle">Upload in  MR.KK</p>
             <?php if (count($prompts) > 0): ?>
                 <div class="prompt-grid">
                     <?php foreach ($prompts as $index => $prompt): ?>
@@ -476,7 +475,7 @@ require_once 'products/includes/seo.php';
                     <?php endforeach; ?>
                 </div>
             <?php else: ?>
-                <div class="empty-note">No AI prompts yet. Admin panel থেকে prompt add করলে এখানে প্রথম card-এ newest item দেখাবে।</div>
+                <div class="empty-note">No AI prompts yet. ।</div>
             <?php endif; ?>
 
             <a class="back-link" href="index.php">Back to Home</a>
