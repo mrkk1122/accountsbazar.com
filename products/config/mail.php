@@ -9,9 +9,11 @@ define('MAIL_SMTP_HOST', getenv('MAIL_SMTP_HOST') ?: 'mail.accountsbazar.com');
 define('MAIL_SMTP_PORT', (int) (getenv('MAIL_SMTP_PORT') ?: 465));
 define('MAIL_SMTP_ENCRYPTION', getenv('MAIL_SMTP_ENCRYPTION') ?: 'ssl');
 define('MAIL_SMTP_AUTH', true);
+define('MAIL_SMTP_AUTH_METHOD', getenv('MAIL_SMTP_AUTH_METHOD') ?: 'auto');
 // Alternative port if primary fails (usually 587 with TLS for submission)
 define('MAIL_SMTP_ALT_PORT', (int) (getenv('MAIL_SMTP_ALT_PORT') ?: 587));
 define('MAIL_SMTP_ALT_ENCRYPTION', getenv('MAIL_SMTP_ALT_ENCRYPTION') ?: 'tls');
+define('MAIL_HELO_DOMAIN', getenv('MAIL_HELO_DOMAIN') ?: 'accountsbazar.com');
 define('MAIL_SMTP_USERNAME', getenv('MAIL_SMTP_USERNAME') ?: (getenv('MAIL_SUPPORT_USERNAME') ?: 'otp@accountsbazar.com'));
 define('MAIL_SMTP_PASSWORD', getenv('MAIL_SMTP_PASSWORD') ?: (getenv('MAIL_SUPPORT_PASSWORD') ?: '1410689273KK@#'));
 define('MAIL_FROM_ADDRESS', getenv('MAIL_FROM_ADDRESS') ?: MAIL_SMTP_USERNAME);

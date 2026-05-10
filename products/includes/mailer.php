@@ -30,6 +30,42 @@ function smtpSendCommandWithResponse($socket, $command) {
     return array(true, $response);
 }
 
+function smtpAuth($socket, $smtpUsername, $smtpPassword) {
+    $authMethod = strtolower(trim((string) (defined('MAIL_SMTP_AUTH_METHOD') ? MAIL_SMTP_AUTH_METHOD : 'auto')));
+
+    $tryPlain = ($authMethod === 'auto' || $authMethod === 'plain');
+    $tryLogin = ($authMethod === 'auto' || $authMethod === 'login');
+
+    if ($tryPlain) {
+        $plainToken = base64_encode("\0" . $smtpUsername . "\0" . $smtpPassword);
+        list($plainWriteOk, $plainResponse) = smtpSendCommandWithResponse($socket, 'AUTH PLAIN ' . $plainToken);
+        if ($plainWriteOk && in_array(smtpGetStatusCode($plainResponse), array(235), true)) {
+            return array(true, $plainResponse);
+        }
+    }
+
+    if ($tryLogin) {
+        list($authOk, $authResponse) = smtpSendCommandWithResponse($socket, 'AUTH LOGIN');
+        if (!$authOk || !in_array(smtpGetStatusCode($authResponse), array(334), true)) {
+            return array(false, $authResponse);
+        }
+
+        list($userOk, $userResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpUsername));
+        if (!$userOk || !in_array(smtpGetStatusCode($userResponse), array(334), true)) {
+            return array(false, $userResponse);
+        }
+
+        list($passOk, $passResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpPassword));
+        if (!$passOk || !in_array(smtpGetStatusCode($passResponse), array(235), true)) {
+            return array(false, $passResponse);
+        }
+
+        return array(true, $passResponse);
+    }
+
+    return array(false, 'No SMTP auth method enabled');
+}
+
 function smtpExpectCode($socket, $expectedCodes) {
     $response = smtpReadResponse($socket);
     $statusCode = (int) substr($response, 0, 3);
@@ -173,9 +209,10 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
             continue;
         }
 
-        $hostName = preg_replace('/[^a-zA-Z0-9.-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? 'localhost'));
+        $defaultHelo = defined('MAIL_HELO_DOMAIN') ? MAIL_HELO_DOMAIN : 'accountsbazar.com';
+        $hostName = preg_replace('/[^a-zA-Z0-9.-]/', '', (string) ($_SERVER['HTTP_HOST'] ?? $defaultHelo));
         if ($hostName === '') {
-            $hostName = 'localhost';
+            $hostName = $defaultHelo;
         }
 
         list($ehloOk, $ehloResponse) = smtpSendCommandWithResponse($socket, 'EHLO ' . $hostName);
@@ -240,44 +277,12 @@ function smtpSendMail($to, $subject, $body, $replyTo = MAIL_REPLY_TO, $username 
         }
 
         if (MAIL_SMTP_AUTH) {
-            list($authOk, $authResponse) = smtpSendCommandWithResponse($socket, 'AUTH LOGIN');
+            list($authSuccess, $authResponse) = smtpAuth($socket, $smtpUsername, $smtpPassword);
             $lastSmtpResponse = $authResponse;
-            if (!$authOk || !in_array(smtpGetStatusCode($authResponse), array(334), true)) {
+            if (!$authSuccess) {
                 fclose($socket);
                 if ($attempts >= $maxAttempts) {
-                    $debugMsg = 'AUTH LOGIN rejected | Username: ' . $smtpUsername . ' | Host: ' . MAIL_SMTP_HOST . ' | SMTP: ' . trim($lastSmtpResponse);
-                    if (MAIL_DEBUG_MODE) {
-                        error_log('[smtpSendMail] ' . $debugMsg);
-                    }
-                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
-                    return false;
-                }
-                sleep(1);
-                continue;
-            }
-
-            list($userOk, $userResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpUsername));
-            $lastSmtpResponse = $userResponse;
-            if (!$userOk || !in_array(smtpGetStatusCode($userResponse), array(334), true)) {
-                fclose($socket);
-                if ($attempts >= $maxAttempts) {
-                    $debugMsg = 'SMTP username rejected | Username: ' . $smtpUsername . ' | SMTP: ' . trim($lastSmtpResponse);
-                    if (MAIL_DEBUG_MODE) {
-                        error_log('[smtpSendMail] ' . $debugMsg);
-                    }
-                    logMailActivity($to, $subject, 'FAILED', $debugMsg);
-                    return false;
-                }
-                sleep(1);
-                continue;
-            }
-
-            list($passOk, $passResponse) = smtpSendCommandWithResponse($socket, base64_encode($smtpPassword));
-            $lastSmtpResponse = $passResponse;
-            if (!$passOk || !in_array(smtpGetStatusCode($passResponse), array(235), true)) {
-                fclose($socket);
-                if ($attempts >= $maxAttempts) {
-                    $debugMsg = 'SMTP password rejected | Username: ' . $smtpUsername . ' | SMTP: ' . trim($lastSmtpResponse);
+                    $debugMsg = 'SMTP authentication failed | Username: ' . $smtpUsername . ' | SMTP: ' . trim($lastSmtpResponse);
                     if (MAIL_DEBUG_MODE) {
                         error_log('[smtpSendMail] ' . $debugMsg);
                     }

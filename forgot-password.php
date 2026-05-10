@@ -176,10 +176,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                         $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
                         $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
 
-                        $htmlBody = getEmailTemplate(
-                            'Password Reset OTP',
-                            '<p>Hello,</p><p>We received a password reset request for your account.</p><p><strong>Your OTP: ' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '</strong></p><p>This OTP is valid for 15 minutes. Do not share it with anyone.</p>'
-                        );
+                        $safeOtp = htmlspecialchars($otp, ENT_QUOTES, 'UTF-8');
+                        $htmlBody = '<!DOCTYPE html><html><body style="font-family:Arial,sans-serif;color:#111;">'
+                            . '<p>Hello,</p>'
+                            . '<p>We received a password reset request for your Accounts Bazar account.</p>'
+                            . '<p style="font-size:20px;"><strong>Your OTP: ' . $safeOtp . '</strong></p>'
+                            . '<p>This OTP is valid for 15 minutes. Do not share it with anyone.</p>'
+                            . '<p>Accounts Bazar Team</p>'
+                            . '</body></html>';
 
                         // Try direct SMTP send first for immediate OTP delivery.
                         $smtpSent = smtpSendMail($email, $subject, $htmlBody);
