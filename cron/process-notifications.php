@@ -3,8 +3,8 @@
  * Process Queued Notifications
  * This script should be run periodically (every 5 minutes) via cron job
  * 
- * Cron setup:
- * */5 * * * * curl -s http://accountsbazar.com/cron/process-notifications.php > /dev/null
+ * Cron setup example (every 5 minutes):
+ * curl -s http://accountsbazar.com/cron/process-notifications.php > /dev/null
  */
 
 require_once __DIR__ . '/../products/config/config.php';
