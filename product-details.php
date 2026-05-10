@@ -131,7 +131,7 @@ if ($reviewCount > 0) {
 $seo = [
     'title'       => html_entity_decode($seoTitle, ENT_QUOTES, 'UTF-8'),
     'description' => $seoDescription,
-    'keywords'    => $seoKeywords,
+    'keywords'    => $seoKeywords . ', youtube premium bangladesh, capcut premium, vpn premium, google veo premium, chatgpt premium',
     'canonical'   => $seoCanonical,
     'og_image'    => $seoImage,
     'og_type'     => 'product',
@@ -400,11 +400,7 @@ require_once 'products/includes/seo.php';
         </div>
     </section>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Accounts Bazar. All rights reserved.</p>
-        </div>
-    </footer>
+    <?php require_once 'products/includes/site-footer.php'; ?>
 
     <nav class="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
         <a href="index.php"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>

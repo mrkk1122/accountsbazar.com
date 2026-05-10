@@ -70,12 +70,21 @@ try {
 <head>
 <?php
 $seo = [
-    'title'       => 'Shop – প্রিমিয়াম ডিজিটাল প্রোডাক্ট কিনুন | Accounts Bazar',
-    'description' => 'Accounts Bazar Shop-এ সবচেয়ে কম দামে কিনুন Netflix, Spotify, ChatGPT, Disney+, Canva Pro সহ সেরা ডিজিটাল অ্যাকাউন্ট। নিশ্চিত মান, তাৎক্ষণিক ডেলিভারি, বিকাশ/নগদ পেমেন্ট।',
-    'keywords'    => 'buy digital accounts bangladesh, netflix buy bd, spotify premium buy, chatgpt account price, canva pro bd, accounts bazar shop, digital subscription shop, cheap premium accounts',
+    'title'       => 'Shop Premium Accounts – YouTube Premium, CapCut Premium, VPN, ChatGPT | Accounts Bazar',
+    'description' => 'Shop page থেকে YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, ChatGPT Premium এবং অন্যান্য ডিজিটাল সাবস্ক্রিপশন খুঁজে কিনুন। বাংলাদেশে দ্রুত ডেলিভারি।',
+    'keywords'    => 'shop youtube premium bangladesh, capcut premium buy bd, vpn premium subscription, google veo premium buy, chatgpt premium price bd, digital account shop bangladesh',
     'canonical'   => 'https://accountsbazar.com/shop.php',
     'og_image'    => 'https://accountsbazar.com/images/logo.png',
     'og_type'     => 'website',
+    'extra_json_ld' => [
+        [
+            '@context' => 'https://schema.org',
+            '@type' => 'CollectionPage',
+            'name' => 'Premium Digital Accounts Shop',
+            'url' => 'https://accountsbazar.com/shop.php',
+            'description' => 'Browse premium subscriptions and digital tools sold by Accounts Bazar in Bangladesh.'
+        ]
+    ],
 ];
 require_once 'products/includes/seo.php';
 ?>
@@ -179,11 +188,7 @@ require_once 'products/includes/seo.php';
         </div>
     </section>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Accounts Bazar. All rights reserved.</p>
-        </div>
-    </footer>
+    <?php require_once 'products/includes/site-footer.php'; ?>
 
     <nav class="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
         <a href="index.php"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>

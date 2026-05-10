@@ -270,9 +270,9 @@ if ($productId > 0) {
 <head>
 <?php
 $seo = [
-    'title'       => 'Checkout - Accounts Bazar',
-    'description' => 'Secure checkout page for completing your Accounts Bazar order.',
-    'keywords'    => 'accounts bazar checkout, secure digital account payment, bkash nagad rocket payment',
+    'title'       => 'Checkout Premium Subscription Order | Accounts Bazar Bangladesh',
+    'description' => 'Secure checkout for YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, ChatGPT Premium and other digital subscriptions on Accounts Bazar.',
+    'keywords'    => 'premium subscription checkout bangladesh, youtube premium payment bd, capcut premium order, vpn premium checkout, chatgpt premium order',
     'canonical'   => 'https://accountsbazar.com/checkout.php',
     'og_image'    => 'https://accountsbazar.com/images/logo.png',
     'og_type'     => 'website',
@@ -469,11 +469,7 @@ require_once 'products/includes/seo.php';
         </div>
     </section>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Accounts Bazar. All rights reserved.</p>
-        </div>
-    </footer>
+    <?php require_once 'products/includes/site-footer.php'; ?>
 
     <nav class="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
         <a href="index.php"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>

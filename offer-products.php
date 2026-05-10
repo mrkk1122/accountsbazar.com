@@ -52,12 +52,20 @@ try {
 <head>
 <?php
 $seo = [
-    'title'       => 'অফার প্রোডাক্ট – বিশেষ ছাড়ে ডিজিটাল অ্যাকাউন্ট | Accounts Bazar',
-    'description' => 'Accounts Bazar Offer Page-এ পান Netflix, Spotify, YouTube Premium সহ প্রিমিয়াম ডিজিটাল অ্যাকাউন্ট বিশেষ ছাড়ে। সীমিত সময়ের হট ডিল – এখনই অর্ডার করুন!',
-    'keywords'    => 'offer products bangladesh, discount digital accounts, netflix offer bd, cheap subscriptions, hot deals accounts bazar, premium accounts discount, limited time offer bd',
+    'title'       => 'Offer Products – Discount on YouTube Premium, CapCut Premium, VPN & ChatGPT',
+    'description' => 'Accounts Bazar offer page-এ YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, ChatGPT Premium এবং অন্যান্য ডিজিটাল সাবস্ক্রিপশনে বিশেষ ছাড় দেখুন।',
+    'keywords'    => 'youtube premium offer bangladesh, capcut premium discount, vpn premium deal bd, google veo premium offer, chatgpt premium discount, hot digital subscription deals',
     'canonical'   => 'https://accountsbazar.com/offer-products.php',
     'og_image'    => 'https://accountsbazar.com/images/logo.png',
     'og_type'     => 'website',
+    'extra_json_ld' => [
+        [
+            '@context' => 'https://schema.org',
+            '@type' => 'OfferCatalog',
+            'name' => 'Premium Subscription Deals',
+            'url' => 'https://accountsbazar.com/offer-products.php'
+        ]
+    ],
 ];
 require_once 'products/includes/seo.php';
 ?>
@@ -146,11 +154,7 @@ require_once 'products/includes/seo.php';
         </div>
     </section>
 
-    <footer class="footer">
-        <div class="container">
-            <p>&copy; 2026 Accounts Bazar. All rights reserved.</p>
-        </div>
-    </footer>
+    <?php require_once 'products/includes/site-footer.php'; ?>
 
     <nav class="mobile-bottom-nav" aria-label="Mobile Bottom Navigation">
         <a href="index.php"><span class="nav-icon">🏠</span><span class="nav-label">Home</span></a>

@@ -10,6 +10,7 @@
  *   'canonical'   => 'https://accountsbazar.com/page.php',
  *   'og_image'    => 'https://accountsbazar.com/images/logo.png',
  *   'noindex'     => false,   // set true for private pages
+ *   'extra_json_ld' => [],
  * ];
  */
 
@@ -19,9 +20,9 @@ if (file_exists(__DIR__ . '/../config/webpush.php')) {
 
 
 $seo = array_merge([
-    'title'       => 'Accounts Bazar – Premium Digital Accounts & Subscriptions',
-    'description' => 'Accounts Bazar offers verified premium digital accounts, subscriptions, AI prompts, and instant delivery in Bangladesh.',
-    'keywords'    => 'accounts bazar, premium accounts, digital subscriptions, bkash payment, ai prompts, bangladesh',
+    'title'       => 'Accounts Bazar – Premium Digital Accounts, AI Tools & Subscriptions in Bangladesh',
+    'description' => 'Buy YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, ChatGPT Premium and other digital subscriptions in Bangladesh from Accounts Bazar.',
+    'keywords'    => 'accounts bazar, youtube premium bangladesh, capcut premium, vpn premium, google veo premium, chatgpt premium, digital subscriptions bd, premium accounts bangladesh',
     'canonical'   => 'https://accountsbazar.com/',
     'og_image'    => 'https://accountsbazar.com/images/logo.png',
     'og_image_alt'=> 'Accounts Bazar logo',
@@ -29,6 +30,7 @@ $seo = array_merge([
     'locale'      => 'bn_BD',
     'twitter_site'=> '@AccountsBazar',
     'noindex'     => false,
+    'extra_json_ld' => array(),
     'breadcrumb_items' => [
         ['name' => 'Home', 'item' => 'https://accountsbazar.com/']
     ],
@@ -163,7 +165,7 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
                 "width": 512,
                 "height": 512
             },
-            "description": "Bangladesh-এর বিশ্বস্ত প্রিমিয়াম ডিজিটাল অ্যাকাউন্ট ও সাবস্ক্রিপশন মার্কেটপ্লেস।",
+            "description": "Bangladesh-এর জন্য YouTube Premium, CapCut Premium, VPN Premium, Google Veo Premium, ChatGPT Premium এবং অন্যান্য ডিজিটাল সাবস্ক্রিপশনের বিশ্বস্ত মার্কেটপ্লেস।",
             "foundingDate": "2024",
             "areaServed": {
                 "@type": "Country",
@@ -228,3 +230,12 @@ $appleTouchHref = htmlspecialchars($assetBase . '/images/logo.png', ENT_QUOTES, 
         echo json_encode($webPageSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         ?>
         </script>
+        <?php
+        $extraJsonLd = is_array($seo['extra_json_ld'] ?? null) ? $seo['extra_json_ld'] : array();
+        foreach ($extraJsonLd as $extraSchema):
+            if (!is_array($extraSchema) || empty($extraSchema)) {
+                continue;
+            }
+        ?>
+        <script type="application/ld+json"><?php echo json_encode($extraSchema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES); ?></script>
+        <?php endforeach; ?>

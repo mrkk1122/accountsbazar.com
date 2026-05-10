@@ -1508,6 +1508,10 @@ footer {
     align-items: start;
 }
 
+.footer-grid-wide {
+    grid-template-columns: 1.4fr 1fr 1fr 1fr;
+}
+
 /* Brand column */
 .footer-logo {
     font-size: 22px;
@@ -1655,6 +1659,35 @@ footer {
 
 .footer-links a:hover { color: #60a5fa; padding-left: 4px; }
 
+.footer-keywords {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.footer-keywords a {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(37, 99, 235, 0.18);
+    color: #bfdbfe;
+    text-decoration: none;
+    font-size: 12px;
+    line-height: 1;
+}
+
+.footer-keywords a:hover {
+    background: rgba(96, 165, 250, 0.22);
+    color: #ffffff;
+}
+
+.footer-trust-list li {
+    color: #94a3b8;
+    line-height: 1.6;
+}
+
 /* Payment section */
 .footer-pay-note {
     color: #64748b;
@@ -1731,6 +1764,11 @@ footer {
 
     .pwa-fab-btn {
         padding: 5px 10px 5px 5px;
+    }
+
+    .footer-grid-wide {
+        grid-template-columns: 1fr;
+        gap: 24px;
     }
 
     .pwa-fab-label {
