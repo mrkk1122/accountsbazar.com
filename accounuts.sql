@@ -1,11 +1,11 @@
--- cPanel/phpMyAdmin import note:
+]633;E;printf -- "-- cPanel/phpMyAdmin import note:\\n-- 1) First create/select your hosting database (example: cpaneluser_accountsbazar)\\n-- 2) Then import this file. Do not run CREATE DATABASE/USE here.\\n\\n";91d5e20a-7683-457c-9548-0c988d1f21c2]633;C-- cPanel/phpMyAdmin import note:
 -- 1) First create/select your hosting database (example: cpaneluser_accountsbazar)
 -- 2) Then import this file. Do not run CREATE DATABASE/USE here.
+
 
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
 
--- Products Table
 CREATE TABLE IF NOT EXISTS products (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(255) NOT NULL,
@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS products (
     INDEX idx_price (price)
 );
 
--- Users Table
 CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) UNIQUE NOT NULL,
@@ -42,7 +41,6 @@ CREATE TABLE IF NOT EXISTS users (
     INDEX idx_username (username)
 );
 
--- Orders Table
 CREATE TABLE IF NOT EXISTS orders (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_number VARCHAR(50) UNIQUE NOT NULL,
@@ -63,7 +61,6 @@ CREATE TABLE IF NOT EXISTS orders (
     INDEX idx_created_at (created_at)
 );
 
--- Order Items Table
 CREATE TABLE IF NOT EXISTS order_items (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_id INT NOT NULL,
@@ -77,7 +74,6 @@ CREATE TABLE IF NOT EXISTS order_items (
     INDEX idx_order_id (order_id)
 );
 
--- Cart Table
 CREATE TABLE IF NOT EXISTS cart (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
@@ -89,7 +85,6 @@ CREATE TABLE IF NOT EXISTS cart (
     UNIQUE KEY unique_cart (user_id, product_id)
 );
 
--- Reviews Table
 CREATE TABLE IF NOT EXISTS reviews (
     id INT AUTO_INCREMENT PRIMARY KEY,
     product_id INT NOT NULL,
@@ -104,7 +99,6 @@ CREATE TABLE IF NOT EXISTS reviews (
     INDEX idx_product_id (product_id)
 );
 
--- Categories Table
 CREATE TABLE IF NOT EXISTS categories (
     id INT AUTO_INCREMENT PRIMARY KEY,
     name VARCHAR(100) NOT NULL UNIQUE,
@@ -113,7 +107,6 @@ CREATE TABLE IF NOT EXISTS categories (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Payments Table
 CREATE TABLE IF NOT EXISTS payments (
     id INT AUTO_INCREMENT PRIMARY KEY,
     order_id INT NOT NULL,
@@ -126,7 +119,6 @@ CREATE TABLE IF NOT EXISTS payments (
     INDEX idx_order_id (order_id)
 );
 
--- AI Prompts Table
 CREATE TABLE IF NOT EXISTS ai_prompts (
     id INT AUTO_INCREMENT PRIMARY KEY,
     prompt_text TEXT NOT NULL,
@@ -134,7 +126,6 @@ CREATE TABLE IF NOT EXISTS ai_prompts (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- AI Prompt Reactions Table
 CREATE TABLE IF NOT EXISTS ai_prompt_reactions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     prompt_id INT NOT NULL,
@@ -146,7 +137,6 @@ CREATE TABLE IF NOT EXISTS ai_prompt_reactions (
     INDEX idx_prompt_reaction (prompt_id, reaction)
 );
 
--- Support Threads Table
 CREATE TABLE IF NOT EXISTS support_threads (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NULL,
@@ -159,7 +149,6 @@ CREATE TABLE IF NOT EXISTS support_threads (
     INDEX idx_user_id (user_id)
 );
 
--- Support Messages Table
 CREATE TABLE IF NOT EXISTS support_messages (
     id INT AUTO_INCREMENT PRIMARY KEY,
     thread_id INT NOT NULL,
@@ -170,14 +159,12 @@ CREATE TABLE IF NOT EXISTS support_messages (
     CONSTRAINT fk_support_messages_thread FOREIGN KEY (thread_id) REFERENCES support_threads(id) ON DELETE CASCADE
 );
 
--- Support Admin Presence Table
 CREATE TABLE IF NOT EXISTS support_admin_presence (
     admin_user_id INT PRIMARY KEY,
     last_active_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     INDEX idx_last_active_at (last_active_at)
 );
 
--- Site Settings Table
 CREATE TABLE IF NOT EXISTS site_settings (
     id INT AUTO_INCREMENT PRIMARY KEY,
     setting_key VARCHAR(120) NOT NULL UNIQUE,
@@ -185,7 +172,29 @@ CREATE TABLE IF NOT EXISTS site_settings (
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
--- Insert Sample Products
+CREATE TABLE IF NOT EXISTS password_resets (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    email VARCHAR(255) NOT NULL,
+    otp_code VARCHAR(6) NOT NULL,
+    expires_at DATETIME NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_email (email)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS email_queue (
+    id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    to_email VARCHAR(255) NOT NULL,
+    subject VARCHAR(255) NOT NULL,
+    body MEDIUMTEXT NOT NULL,
+    attempts INT DEFAULT 0,
+    status ENUM('pending','sending','sent','failed') DEFAULT 'pending',
+    last_error TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP NULL DEFAULT NULL,
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO products (name, description, price, quantity, category, sku, image) VALUES
 ('Laptop Computer', 'High-performance laptop with Intel i7 processor', 85000.00, 15, 'Electronics', 'LAPTOP-001', 'images/laptop.jpg'),
 ('Wireless Mouse', 'Ergonomic wireless mouse with USB receiver', 1500.00, 50, 'Accessories', 'MOUSE-001', 'images/mouse.jpg'),
@@ -198,14 +207,12 @@ INSERT IGNORE INTO products (name, description, price, quantity, category, sku, 
 ('Laptop Stand', 'Adjustable aluminum laptop stand for better ergonomics', 3000.00, 40, 'Accessories', 'STAND-001', 'images/stand.jpg'),
 ('Webcam 1080p', 'Full HD webcam with built-in microphone', 4500.00, 28, 'Electronics', 'WEBCAM-001', 'images/webcam.jpg');
 
--- Insert Categories
 INSERT IGNORE INTO categories (name, description, image) VALUES
 ('Electronics', 'Electronic devices and gadgets', 'images/electronics.jpg'),
 ('Accessories', 'Computer accessories and peripherals', 'images/accessories.jpg'),
 ('Audio', 'Audio equipment and speakers', 'images/audio.jpg'),
 ('Storage', 'Storage devices and solutions', 'images/storage.jpg');
 
--- Insert Sample Admin User
 INSERT INTO users (username, email, password, first_name, last_name, user_type, is_active) VALUES
 ('admin', 'admin@accountsbazar.com', MD5('admin123'), 'Admin', 'User', 'admin', 1)
 ON DUPLICATE KEY UPDATE
@@ -215,36 +222,9 @@ ON DUPLICATE KEY UPDATE
     user_type = 'admin',
     is_active = 1;
 
--- Insert Sample Customer Users
 INSERT IGNORE INTO users (username, email, password, first_name, last_name, phone, city, country, user_type) VALUES
 ('customer1', 'customer1@email.com', MD5('password123'), 'Ahmed', 'Khan', '01712345678', 'Dhaka', 'Bangladesh', 'customer'),
 ('customer2', 'customer2@email.com', MD5('password123'), 'Fatima', 'Ahmed', '01798765432', 'Chittagong', 'Bangladesh', 'customer'),
 ('customer3', 'customer3@email.com', MD5('password123'), 'Mohammad', 'Hassan', '01956789012', 'Sylhet', 'Bangladesh', 'customer');
 
 SET FOREIGN_KEY_CHECKS = 1;
-
--- ── Password Reset OTPs ──────────────────────────────────────────────────────
-CREATE TABLE IF NOT EXISTS `password_resets` (
-    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `email`      VARCHAR(255) NOT NULL,
-    `otp_code`   VARCHAR(6)   NOT NULL,
-    `expires_at` DATETIME     NOT NULL,
-    `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
-    INDEX `idx_email` (`email`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
-
--- ── Email Queue (cron-based delivery fallback) ───────────────────────────────
-CREATE TABLE IF NOT EXISTS `email_queue` (
-    `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `to_email`   VARCHAR(255) NOT NULL,
-    `subject`    VARCHAR(255) NOT NULL,
-    `body`       MEDIUMTEXT   NOT NULL,
-    `attempts`   INT          DEFAULT 0,
-    `status`     ENUM('pending','sending','sent','failed') DEFAULT 'pending',
-    `last_error` TEXT,
-    `created_at` TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
-    `sent_at`    TIMESTAMP    NULL DEFAULT NULL,
-    INDEX `idx_status`     (`status`),
-    INDEX `idx_created_at` (`created_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
-
