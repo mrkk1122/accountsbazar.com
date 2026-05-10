@@ -26,33 +26,6 @@
             </div>
 
             <div class="footer-section">
-                <ul class="footer-links">
-                    <li><a href="shop.php?q=YouTube+Premium">YouTube Premium Bangladesh</a></li>
-                    <li><a href="shop.php?q=CapCut+Premium">CapCut Premium Subscription</a></li>
-                    <li><a href="shop.php?q=VPN+Premium">VPN Premium Account</a></li>
-                    <li><a href="shop.php?q=Google+Veo+Premium">Google Veo Premium Access</a></li>
-                    <li><a href="shop.php?q=ChatGPT+Premium">ChatGPT Premium / Plus</a></li>
-                </ul>
-            </div>
-
-            <div class="footer-section">
-                <ul class="footer-links">
-                    <li><a href="index.php">Home</a></li>
-                    <li><a href="shop.php">All Premium Accounts</a></li>
-                    <li><a href="offer-products.php">Hot Deals & Offers</a></li>
-                    <li><a href="ai-prompt.php">AI Prompt Marketplace</a></li>
-                    <li><a href="login.php">Login / Register</a></li>
-                </ul>
-                <div class="footer-keywords" aria-label="Popular premium account searches">
-                    <a href="shop.php?q=YouTube+Premium">YouTube Premium</a>
-                    <a href="shop.php?q=CapCut+Pro">CapCut Pro</a>
-                    <a href="shop.php?q=VPN">VPN Premium</a>
-                    <a href="shop.php?q=Google+Veo">Google Veo</a>
-                    <a href="shop.php?q=ChatGPT">ChatGPT Premium</a>
-                </div>
-            </div>
-
-            <div class="footer-section">
                 <h4 class="footer-heading">Payment & Trust</h4>
                 <p class="footer-pay-note">বিকাশ, নগদ, রকেট ও সরাসরি সাপোর্টের মাধ্যমে নিরাপদ অর্ডার সম্পন্ন করুন।</p>
                 <div class="footer-payments">
