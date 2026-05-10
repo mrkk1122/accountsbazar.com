@@ -207,6 +207,30 @@ function usersColumnExists($conn, $columnName) {
     return !empty($row);
 }
 
+function tableColumnExists($conn, $tableName, $columnName) {
+    if (!$conn) {
+        return false;
+    }
+
+    $tableName = trim((string) $tableName);
+    $columnName = trim((string) $columnName);
+    if ($tableName === '' || $columnName === '') {
+        return false;
+    }
+
+    $safeTable = $conn->real_escape_string($tableName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $sql = "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . $safeColumn . "'";
+    $result = $conn->query($sql);
+    if (!$result) {
+        return false;
+    }
+
+    $row = $result->fetch_assoc();
+    $result->free();
+    return !empty($row);
+}
+
 function maskEmailAddress($email) {
     $email = (string) $email;
     $atPos = strpos($email, '@');
@@ -361,6 +385,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                                 $insStmt->bind_param('sss', $email, $otp, $expires);
                                 $otpStoredInDb = $insStmt->execute();
                                 $insStmt->close();
+
+                                // Legacy schema fallback: old tables may require a non-null token column.
+                                if (!$otpStoredInDb && tableColumnExists($conn, 'password_resets', 'token')) {
+                                    $otpToken = '';
+                                    try {
+                                        $otpToken = bin2hex(random_bytes(16));
+                                    } catch (Throwable $tokenEx) {
+                                        $otpToken = md5(uniqid((string) mt_rand(), true));
+                                    }
+
+                                    $insWithToken = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at, token) VALUES (?, ?, ?, ?)');
+                                    if ($insWithToken) {
+                                        $insWithToken->bind_param('ssss', $email, $otp, $expires, $otpToken);
+                                        $otpStoredInDb = $insWithToken->execute();
+                                        $insWithToken->close();
+                                    }
+                                }
                             } else {
                                 error_log('[ForgotPassword/send_otp] INSERT prepare failed: ' . $conn->error);
                             }
