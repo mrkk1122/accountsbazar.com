@@ -96,6 +96,7 @@ try {
     jsonResponse(array(
         'success' => true,
         'count' => count($items),
+        'items' => $items,
         'notifications' => $items
     ));
     
