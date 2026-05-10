@@ -205,46 +205,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
                 if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     $error = 'Your account email is invalid. Please contact support.';
                 } else {
-                    // Ensure password_resets table exists before querying it
-                    if (!ensurePasswordResetsTable($conn)) {
-                        throw new RuntimeException('Could not create or access password_resets table');
-                    }
+                    $canUseOtpTable = ensurePasswordResetsTable($conn);
 
                     // Rate-limit: max 3 requests per 10 minutes per email
-                    $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
-                    $rateStmt = $conn->prepare($rateSql);
-                    if (!$rateStmt) {
-                        throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
-                    }
-                    $rateStmt->bind_param('s', $email);
-                    $rateStmt->execute();
-                    $rateRow  = stmtFetchAssocRow($rateStmt);
-                    $rateStmt->close();
+                    if ($canUseOtpTable) {
+                        $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
+                        $rateStmt = $conn->prepare($rateSql);
+                        if (!$rateStmt) {
+                            throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
+                        }
+                        $rateStmt->bind_param('s', $email);
+                        $rateStmt->execute();
+                        $rateRow  = stmtFetchAssocRow($rateStmt);
+                        $rateStmt->close();
 
-                    if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
-                        $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
+                        if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
+                            $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
+                        }
                     } else {
-                        // Delete any stale OTPs for this email
-                        $delStmt = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
-                        if ($delStmt) {
-                            $delStmt->bind_param('s', $email);
-                            $delStmt->execute();
-                            $delStmt->close();
+                        $nowTs = time();
+                        $sessionRates = $_SESSION['fp_rate_history'] ?? array();
+                        $sessionRates = array_values(array_filter((array) $sessionRates, function ($ts) use ($nowTs) {
+                            return ((int) $ts) >= ($nowTs - 600);
+                        }));
+                        if (count($sessionRates) >= 3) {
+                            $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
                         } else {
-                            error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
+                            $sessionRates[] = $nowTs;
+                            $_SESSION['fp_rate_history'] = $sessionRates;
+                        }
+                    }
+
+                    if ($error === '') {
+                        // Delete any stale OTPs for this email
+                        if ($canUseOtpTable) {
+                            $delStmt = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
+                            if ($delStmt) {
+                                $delStmt->bind_param('s', $email);
+                                $delStmt->execute();
+                                $delStmt->close();
+                            } else {
+                                error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
+                            }
                         }
 
                         // Generate 6-digit OTP
-                        $otp     = (string) random_int(100000, 999999);
-                        $expires = date('Y-m-d H:i:s', time() + 15 * 60); // 15 minutes
+                        $otp = (string) random_int(100000, 999999);
+                        $expiresTs = time() + 15 * 60;
+                        $expires = date('Y-m-d H:i:s', $expiresTs);
 
-                        $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
-                        if (!$insStmt) {
-                            throw new RuntimeException('DB prepare failed (insert OTP): ' . $conn->error);
+                        $otpStoredInDb = false;
+                        if ($canUseOtpTable) {
+                            $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
+                            if ($insStmt) {
+                                $insStmt->bind_param('sss', $email, $otp, $expires);
+                                $otpStoredInDb = $insStmt->execute();
+                                $insStmt->close();
+                            } else {
+                                error_log('[ForgotPassword/send_otp] INSERT prepare failed: ' . $conn->error);
+                            }
                         }
-                        $insStmt->bind_param('sss', $email, $otp, $expires);
-                        $insStmt->execute();
-                        $insStmt->close();
+
+                        if (!$otpStoredInDb) {
+                            $_SESSION['fp_otp_store'] = 'session';
+                            $_SESSION['fp_otp_code'] = $otp;
+                            $_SESSION['fp_otp_email'] = $email;
+                            $_SESSION['fp_otp_expires'] = $expiresTs;
+                        } else {
+                            $_SESSION['fp_otp_store'] = 'db';
+                        }
 
                         // Build OTP email
                         $subject  = 'Accounts Bazar - Password Reset OTP';
@@ -330,7 +359,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
             }
         } catch (Throwable $e) {
             error_log('[ForgotPassword/send_otp] ' . $e->getMessage());
-            $error = 'Server setup issue while generating OTP. Please try again shortly.';
+            $error = 'Could not process OTP request. Please try again.';
         }
     }
 }
@@ -344,31 +373,49 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
         $error = 'Please enter the 6-digit OTP.';
     } else {
         try {
-            $db   = new Database();
-            $conn = $db->getConnection();
+            $otpStore = (string) ($_SESSION['fp_otp_store'] ?? 'db');
 
-            if (!ensurePasswordResetsTable($conn)) {
-                throw new RuntimeException('Could not create or access password_resets table');
-            }
+            if ($otpStore === 'session') {
+                $sessionOtp = (string) ($_SESSION['fp_otp_code'] ?? '');
+                $sessionEmail = (string) ($_SESSION['fp_otp_email'] ?? '');
+                $sessionExpires = (int) ($_SESSION['fp_otp_expires'] ?? 0);
 
-            $chkStmt = $conn->prepare(
-                'SELECT id FROM password_resets WHERE email = ? AND otp_code = ? AND expires_at >= NOW() LIMIT 1'
-            );
-            if (!$chkStmt) {
-                throw new RuntimeException('DB prepare failed (verify OTP): ' . $conn->error);
-            }
-            $chkStmt->bind_param('ss', $email, $otp);
-            $chkStmt->execute();
-            $chkRow = stmtFetchAssocRow($chkStmt);
-            $chkStmt->close();
-            $db->closeConnection();
-
-            if (!$chkRow) {
-                $error = 'Invalid or expired OTP. Please check the code or request a new one.';
+                if ($sessionOtp === '' || $sessionEmail === '' || $sessionExpires <= time()) {
+                    $error = 'Invalid or expired OTP. Please request a new one.';
+                } elseif (strcasecmp($sessionEmail, $email) !== 0 || $sessionOtp !== $otp) {
+                    $error = 'Invalid or expired OTP. Please check the code or request a new one.';
+                } else {
+                    $_SESSION['fp_step']   = 'reset';
+                    $_SESSION['fp_otp_ok'] = true;
+                    $step = 'reset';
+                }
             } else {
-                $_SESSION['fp_step']   = 'reset';
-                $_SESSION['fp_otp_ok'] = true;
-                $step = 'reset';
+                $db   = new Database();
+                $conn = $db->getConnection();
+
+                if (!ensurePasswordResetsTable($conn)) {
+                    throw new RuntimeException('Could not create or access password_resets table');
+                }
+
+                $chkStmt = $conn->prepare(
+                    'SELECT id FROM password_resets WHERE email = ? AND otp_code = ? AND expires_at >= NOW() LIMIT 1'
+                );
+                if (!$chkStmt) {
+                    throw new RuntimeException('DB prepare failed (verify OTP): ' . $conn->error);
+                }
+                $chkStmt->bind_param('ss', $email, $otp);
+                $chkStmt->execute();
+                $chkRow = stmtFetchAssocRow($chkStmt);
+                $chkStmt->close();
+                $db->closeConnection();
+
+                if (!$chkRow) {
+                    $error = 'Invalid or expired OTP. Please check the code or request a new one.';
+                } else {
+                    $_SESSION['fp_step']   = 'reset';
+                    $_SESSION['fp_otp_ok'] = true;
+                    $step = 'reset';
+                }
             }
         } catch (Throwable $e) {
             error_log('[ForgotPassword/verify_otp] ' . $e->getMessage());
@@ -417,7 +464,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POS
 
             if ($affected > 0) {
                 // Clear session state and redirect to login with success message
-                unset($_SESSION['fp_step'], $_SESSION['fp_email'], $_SESSION['fp_otp_ok']);
+                unset($_SESSION['fp_step'], $_SESSION['fp_email'], $_SESSION['fp_otp_ok'], $_SESSION['fp_otp_store'], $_SESSION['fp_otp_code'], $_SESSION['fp_otp_email'], $_SESSION['fp_otp_expires']);
                 header('Location: login.php?message=' . urlencode('Password reset successful! Please log in with your new password.'));
                 exit;
             } else {
@@ -436,6 +483,7 @@ if (isset($_GET['resend']) && $step === 'otp') {
     $_SESSION['fp_step']   = 'email';
     $_SESSION['fp_email']  = '';
     $_SESSION['fp_otp_ok'] = false;
+    unset($_SESSION['fp_otp_store'], $_SESSION['fp_otp_code'], $_SESSION['fp_otp_email'], $_SESSION['fp_otp_expires']);
     $step = 'email';
     $success = 'Please enter your email again to receive a new OTP.';
 }
