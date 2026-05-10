@@ -1,4 +1,4 @@
-]633;E;printf -- "-- cPanel/phpMyAdmin import note:\\n-- 1) First create/select your hosting database (example: cpaneluser_accountsbazar)\\n-- 2) Then import this file. Do not run CREATE DATABASE/USE here.\\n\\n";91d5e20a-7683-457c-9548-0c988d1f21c2]633;C-- cPanel/phpMyAdmin import note:
+-- cPanel/phpMyAdmin import note:
 -- 1) First create/select your hosting database (example: cpaneluser_accountsbazar)
 -- 2) Then import this file. Do not run CREATE DATABASE/USE here.
 
@@ -178,7 +178,9 @@ CREATE TABLE IF NOT EXISTS password_resets (
     otp_code VARCHAR(6) NOT NULL,
     expires_at DATETIME NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_email (email)
+    INDEX idx_email (email),
+    INDEX idx_expires_at (expires_at),
+    INDEX idx_email_otp (email, otp_code)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS email_queue (
