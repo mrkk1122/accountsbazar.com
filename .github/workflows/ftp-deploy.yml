@@ -32,6 +32,13 @@ jobs:
       - name: Install Composer dependencies
         run: composer install --no-dev --optimize-autoloader --no-interaction --prefer-dist
 
+      - name: Validate PHP syntax
+        run: |
+          find . -type f -name "*.php" \
+            -not -path "./vendor/*" \
+            -not -path "./.git/*" \
+            -print0 | xargs -0 -n1 php -l
+
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
