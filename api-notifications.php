@@ -77,17 +77,12 @@ try {
             $db = new Database();
             $conn = $db->getConnection();
             
-            $stmt = $conn->prepare("
-                SELECT email_on_order, email_on_shipment, email_on_delivery, email_on_support, email_promotions
-                FROM notification_preferences
-                WHERE user_id = ?
-            ");
-            $stmt->bind_param('i', $userId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $stmt->close();
-            
-            if ($result->num_rows > 0) {
+            $result = $conn->query(
+                "SELECT email_on_order, email_on_shipment, email_on_delivery, email_on_support, email_promotions "
+                . "FROM notification_preferences WHERE user_id = " . (int) $userId . " LIMIT 1"
+            );
+
+            if ($result && $result->num_rows > 0) {
                 $prefs = $result->fetch_assoc();
                 jsonResponse(array('success' => true, 'preferences' => $prefs));
             } else {

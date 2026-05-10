@@ -7,6 +7,94 @@
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/mailer.php';
 
+function nmStmtFetchAssocRow($stmt) {
+    if (!$stmt) {
+        return null;
+    }
+
+    if (method_exists($stmt, 'get_result')) {
+        $result = $stmt->get_result();
+        if ($result instanceof mysqli_result) {
+            $row = $result->fetch_assoc();
+            return $row ?: null;
+        }
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        return null;
+    }
+
+    $fields = array();
+    $bindVars = array();
+    while ($field = $meta->fetch_field()) {
+        $fields[$field->name] = null;
+        $bindVars[] = &$fields[$field->name];
+    }
+    $meta->free();
+
+    if (empty($bindVars)) {
+        return null;
+    }
+
+    call_user_func_array(array($stmt, 'bind_result'), $bindVars);
+    if (!$stmt->fetch()) {
+        return null;
+    }
+
+    $row = array();
+    foreach ($fields as $key => $value) {
+        $row[$key] = $value;
+    }
+
+    return $row;
+}
+
+function nmStmtFetchAllRows($stmt) {
+    $rows = array();
+    if (!$stmt) {
+        return $rows;
+    }
+
+    if (method_exists($stmt, 'get_result')) {
+        $result = $stmt->get_result();
+        if ($result instanceof mysqli_result) {
+            while ($row = $result->fetch_assoc()) {
+                $rows[] = $row;
+            }
+            return $rows;
+        }
+    }
+
+    $meta = $stmt->result_metadata();
+    if (!$meta) {
+        return $rows;
+    }
+
+    $fields = array();
+    $bindVars = array();
+    while ($field = $meta->fetch_field()) {
+        $fields[$field->name] = null;
+        $bindVars[] = &$fields[$field->name];
+    }
+    $meta->free();
+
+    if (empty($bindVars)) {
+        return $rows;
+    }
+
+    call_user_func_array(array($stmt, 'bind_result'), $bindVars);
+    while ($stmt->fetch()) {
+        $row = array();
+        foreach ($fields as $key => $value) {
+            $row[$key] = $value;
+        }
+        $rows[] = $row;
+    }
+
+    return $rows;
+}
+
 class NotificationManager {
     private $conn;
     
@@ -124,14 +212,12 @@ class NotificationManager {
         ");
         $stmt->bind_param('i', $userId);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $prefs = nmStmtFetchAssocRow($stmt);
         $stmt->close();
-        
-        if ($result->num_rows === 0) {
+
+        if (!$prefs) {
             return true; // Default: send emails
         }
-        
-        $prefs = $result->fetch_assoc();
         
         $typeMap = array(
             'order' => 'email_on_order',
@@ -176,12 +262,12 @@ class NotificationManager {
             LIMIT 10
         ");
         $stmt->execute();
-        $result = $stmt->get_result();
+        $rows = nmStmtFetchAllRows($stmt);
         $stmt->close();
-        
+
         $processed = 0;
-        
-        while ($row = $result->fetch_assoc()) {
+
+        foreach ($rows as $row) {
             $id = (int) $row['id'];
             $email = (string) $row['email'];
             $subject = (string) $row['subject'];
@@ -229,14 +315,9 @@ class NotificationManager {
         $stmt = $this->conn->prepare($query);
         $stmt->bind_param('ii', $userId, $limit);
         $stmt->execute();
-        $result = $stmt->get_result();
+        $notifications = nmStmtFetchAllRows($stmt);
         $stmt->close();
-        
-        $notifications = array();
-        while ($row = $result->fetch_assoc()) {
-            $notifications[] = $row;
-        }
-        
+
         return $notifications;
     }
     
@@ -267,10 +348,9 @@ class NotificationManager {
         ");
         $stmt->bind_param('i', $userId);
         $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
+        $row = nmStmtFetchAssocRow($stmt);
         $stmt->close();
-        
+
         return (int) ($row['count'] ?? 0);
     }
     
@@ -365,8 +445,7 @@ class NotificationManager {
         ");
         $stmt->bind_param('i', $orderId);
         $stmt->execute();
-        $result = $stmt->get_result();
-        $row = $result->fetch_assoc();
+        $row = nmStmtFetchAssocRow($stmt);
         $stmt->close();
         
         return array(

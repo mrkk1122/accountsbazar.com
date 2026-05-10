@@ -5,10 +5,10 @@
  */
 
 session_start();
-require_once 'products/config/config.php';
-require_once 'products/includes/db.php';
-require_once 'products/includes/notifications.php';
-require_once 'admin/includes/auth.php';
+require_once __DIR__ . '/../../products/config/config.php';
+require_once __DIR__ . '/../../products/includes/db.php';
+require_once __DIR__ . '/../../products/includes/notifications.php';
+require_once __DIR__ . '/../includes/auth.php';
 
 header('Content-Type: application/json');
 
@@ -49,19 +49,14 @@ try {
             }
             
             // Get user email
-            $stmt = $conn->prepare("SELECT email, first_name FROM users WHERE id = ?");
-            $stmt->bind_param('i', $userId);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            $stmt->close();
-            
-            if ($result->num_rows === 0) {
+            $result = $conn->query("SELECT email, first_name FROM users WHERE id = " . (int) $userId . " LIMIT 1");
+            if (!$result || $result->num_rows === 0) {
                 jsonResponse(array('success' => false, 'error' => 'User not found'), 404);
             }
-            
+
             $user = $result->fetch_assoc();
-            $userEmail = (string) $user['email'];
-            $userName = (string) $user['first_name'];
+            $userEmail = (string) ($user['email'] ?? '');
+            $userName = (string) ($user['first_name'] ?? '');
             
             // Create notification
             $emailData = null;
@@ -98,18 +93,13 @@ try {
             
             $sent = 0;
             foreach ($userIds as $userId) {
-                $stmt = $conn->prepare("SELECT email, first_name FROM users WHERE id = ?");
-                $stmt->bind_param('i', $userId);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                $stmt->close();
-                
-                if ($result->num_rows === 0) {
+                $result = $conn->query("SELECT email, first_name FROM users WHERE id = " . (int) $userId . " LIMIT 1");
+                if (!$result || $result->num_rows === 0) {
                     continue;
                 }
-                
+
                 $user = $result->fetch_assoc();
-                $userEmail = (string) $user['email'];
+                $userEmail = (string) ($user['email'] ?? '');
                 
                 $emailData = null;
                 if ($sendEmail) {
