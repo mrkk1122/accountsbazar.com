@@ -40,145 +40,198 @@ $step    = (string) ($_SESSION['fp_step'] ?? 'email');
 $error   = '';
 $success = '';
 
+function normalizePhoneNumber($value) {
+    return preg_replace('/\D+/', '', (string) $value);
+}
+
+function maskEmailAddress($email) {
+    $email = (string) $email;
+    $atPos = strpos($email, '@');
+    if ($atPos === false) {
+        return $email;
+    }
+
+    $local = substr($email, 0, $atPos);
+    $domain = substr($email, $atPos + 1);
+
+    if (strlen($local) <= 2) {
+        $maskedLocal = substr($local, 0, 1) . str_repeat('*', max(strlen($local) - 1, 1));
+    } else {
+        $maskedLocal = substr($local, 0, 2) . str_repeat('*', max(strlen($local) - 2, 2));
+    }
+
+    return $maskedLocal . '@' . $domain;
+}
+
 // ── STEP 1: Receive email, send OTP ──────────────────────────────────────────
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['fp_action']) && $_POST['fp_action'] === 'send_otp') {
-    $email = strtolower(trim((string) ($_POST['fp_email'] ?? '')));
+    $identity = trim((string) ($_POST['fp_email'] ?? ''));
+    $email = '';
+    $phoneDigits = '';
+    $isEmailInput = false;
 
-    if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-        $error = 'Please enter a valid email address.';
+    if (filter_var($identity, FILTER_VALIDATE_EMAIL)) {
+        $isEmailInput = true;
+        $email = strtolower($identity);
     } else {
+        $phoneDigits = normalizePhoneNumber($identity);
+        if (strlen($phoneDigits) < 8 || strlen($phoneDigits) > 15) {
+            $error = 'Enter a valid email address or phone number.';
+        }
+    }
+
+    if ($error === '') {
         try {
             $db   = new Database();
             $conn = $db->getConnection();
 
             // Check user exists
-            $userStmt = $conn->prepare('SELECT id, email, is_active FROM users WHERE email = ? LIMIT 1');
+            if ($isEmailInput) {
+                $userStmt = $conn->prepare('SELECT id, email, is_active, phone FROM users WHERE email = ? LIMIT 1');
+            } else {
+                $userStmt = $conn->prepare(
+                    'SELECT id, email, is_active, phone FROM users
+                     WHERE REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, " ", ""), "-", ""), "+", ""), "(", ""), ")", "") = ?
+                     LIMIT 1'
+                );
+            }
             if (!$userStmt) {
                 throw new RuntimeException('DB prepare failed (find user): ' . $conn->error);
             }
-            $userStmt->bind_param('s', $email);
+            if ($isEmailInput) {
+                $userStmt->bind_param('s', $email);
+            } else {
+                $userStmt->bind_param('s', $phoneDigits);
+            }
             $userStmt->execute();
             $userRow = $userStmt->get_result()->fetch_assoc();
             $userStmt->close();
 
             if (!$userRow) {
-                $error = 'No account found with that email address.';
+                $error = $isEmailInput
+                    ? 'No account found with that email address.'
+                    : 'No account found with that phone number.';
             } elseif ((int) ($userRow['is_active'] ?? 1) === 0) {
                 $error = 'This account is inactive. Please contact support.';
             } else {
-                // Ensure password_resets table exists before querying it
-                $conn->query(
-                    'CREATE TABLE IF NOT EXISTS `password_resets` (
-                        `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-                        `email`      VARCHAR(255) NOT NULL,
-                        `otp_code`   VARCHAR(6)   NOT NULL,
-                        `expires_at` DATETIME     NOT NULL,
-                        `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
-                        INDEX `idx_email` (`email`)
-                    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
-                );
-
-                // Rate-limit: max 3 requests per 10 minutes per email
-                $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
-                $rateStmt = $conn->prepare($rateSql);
-                if (!$rateStmt) {
-                    throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
-                }
-                $rateStmt->bind_param('s', $email);
-                $rateStmt->execute();
-                $rateRow  = $rateStmt->get_result()->fetch_assoc();
-                $rateStmt->close();
-
-                if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
-                    $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
+                $email = strtolower(trim((string) ($userRow['email'] ?? '')));
+                if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    $error = 'Your account email is invalid. Please contact support.';
                 } else {
-                    // Delete any stale OTPs for this email
-                    $delStmt = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
-                    if ($delStmt) {
-                        $delStmt->bind_param('s', $email);
-                        $delStmt->execute();
-                        $delStmt->close();
-                    } else {
-                        error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
-                    }
-
-                    // Generate 6-digit OTP
-                    $otp     = (string) random_int(100000, 999999);
-                    $expires = date('Y-m-d H:i:s', time() + 15 * 60); // 15 minutes
-
-                    $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
-                    if (!$insStmt) {
-                        throw new RuntimeException('DB prepare failed (insert OTP): ' . $conn->error);
-                    }
-                    $insStmt->bind_param('sss', $email, $otp, $expires);
-                    $insStmt->execute();
-                    $insStmt->close();
-
-                    // Build OTP email
-                    $subject  = 'Accounts Bazar – Password Reset OTP';
-                    $body  = "Hello,\r\n\r\n";
-                    $body .= "We received a request to reset the password for your Accounts Bazar account.\r\n\r\n";
-                    $body .= "Your One-Time Password (OTP) is:\r\n\r\n";
-                    $body .= "  " . $otp . "\r\n\r\n";
-                    $body .= "This OTP is valid for 15 minutes. Do not share it with anyone.\r\n\r\n";
-                    $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
-                    $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
-
-                    $htmlBody = getEmailTemplate(
-                        'Password Reset OTP',
-                        '<p>Hello,</p><p>We received a password reset request for your account.</p><p><strong>Your OTP: ' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '</strong></p><p>This OTP is valid for 15 minutes. Do not share it with anyone.</p>'
+                    // Ensure password_resets table exists before querying it
+                    $conn->query(
+                        'CREATE TABLE IF NOT EXISTS `password_resets` (
+                            `id`         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                            `email`      VARCHAR(255) NOT NULL,
+                            `otp_code`   VARCHAR(6)   NOT NULL,
+                            `expires_at` DATETIME     NOT NULL,
+                            `created_at` DATETIME     DEFAULT CURRENT_TIMESTAMP,
+                            INDEX `idx_email` (`email`)
+                        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci'
                     );
 
-                    // Try direct SMTP send first for immediate OTP delivery.
-                    $smtpSent = smtpSendMail($email, $subject, $htmlBody);
-
-                    // Always queue as backup for cron-based retry
-                    $mailQueued = enqueueEmail($conn, $email, $subject, $htmlBody);
-
-                    // Process a few queued jobs immediately so OTP can arrive
-                    // even when cron is not yet configured.
-                    $queueResult = array('queued' => 0, 'sent' => 0);
-                    if ($mailQueued) {
-                        $queueResult = processEmailQueue($conn, 3);
+                    // Rate-limit: max 3 requests per 10 minutes per email
+                    $rateSql  = 'SELECT COUNT(*) AS cnt FROM password_resets WHERE email = ? AND created_at >= NOW() - INTERVAL 10 MINUTE';
+                    $rateStmt = $conn->prepare($rateSql);
+                    if (!$rateStmt) {
+                        throw new RuntimeException('DB prepare failed (rate-limit): ' . $conn->error);
                     }
+                    $rateStmt->bind_param('s', $email);
+                    $rateStmt->execute();
+                    $rateRow  = $rateStmt->get_result()->fetch_assoc();
+                    $rateStmt->close();
 
-                    // If SMTP failed, try PHP mail() as fallback
-                    $phpMailSent = false;
-                    if (!$smtpSent && !((int) ($queueResult['sent'] ?? 0) > 0)) {
-                        $headers = "From: Accounts Bazar <" . MAIL_FROM_ADDRESS . ">\r\n";
-                        $headers .= "MIME-Version: 1.0\r\n";
-                        $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
-                        $phpMailSent = @mail($email, $subject, $htmlBody, $headers);
-                        if ($phpMailSent) {
-                            logMailActivity($email, $subject, 'SUCCESS', 'Sent via PHP mail() fallback');
-                        }
-                    }
-
-                    if ($smtpSent && $mailQueued) {
-                        // Mark as sent in the queue so cron does not resend
-                        $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
-                        if ($markSentStmt) {
-                            $markSentStmt->bind_param('s', $email);
-                            $markSentStmt->execute();
-                            $markSentStmt->close();
-                        }
-                    }
-                    $db->closeConnection();
-
-                    $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
-
-                    if (!$mailQueued) {
-                        $error = 'Could not queue OTP email. Please try again or contact support.';
-                    } elseif (!$sentNow) {
-                        $error = 'OTP email could not be delivered right now. Please try again after 1-2 minutes.';
-                        $_SESSION['fp_step'] = 'email';
-                        $step = 'email';
+                    if ((int) ($rateRow['cnt'] ?? 0) >= 3) {
+                        $error = 'Too many OTP requests. Please wait 10 minutes and try again.';
                     } else {
-                        $_SESSION['fp_step']   = 'otp';
-                        $_SESSION['fp_email']  = $email;
-                        $_SESSION['fp_otp_ok'] = false;
-                        $step    = 'otp';
-                        $success = 'OTP sent to ' . htmlspecialchars($email) . '. Check your inbox (and spam folder).';
+                        // Delete any stale OTPs for this email
+                        $delStmt = $conn->prepare('DELETE FROM password_resets WHERE email = ?');
+                        if ($delStmt) {
+                            $delStmt->bind_param('s', $email);
+                            $delStmt->execute();
+                            $delStmt->close();
+                        } else {
+                            error_log('[ForgotPassword/send_otp] DELETE prepare failed: ' . $conn->error);
+                        }
+
+                        // Generate 6-digit OTP
+                        $otp     = (string) random_int(100000, 999999);
+                        $expires = date('Y-m-d H:i:s', time() + 15 * 60); // 15 minutes
+
+                        $insStmt = $conn->prepare('INSERT INTO password_resets (email, otp_code, expires_at) VALUES (?, ?, ?)');
+                        if (!$insStmt) {
+                            throw new RuntimeException('DB prepare failed (insert OTP): ' . $conn->error);
+                        }
+                        $insStmt->bind_param('sss', $email, $otp, $expires);
+                        $insStmt->execute();
+                        $insStmt->close();
+
+                        // Build OTP email
+                        $subject  = 'Accounts Bazar – Password Reset OTP';
+                        $body  = "Hello,\r\n\r\n";
+                        $body .= "We received a request to reset the password for your Accounts Bazar account.\r\n\r\n";
+                        $body .= "Your One-Time Password (OTP) is:\r\n\r\n";
+                        $body .= "  " . $otp . "\r\n\r\n";
+                        $body .= "This OTP is valid for 15 minutes. Do not share it with anyone.\r\n\r\n";
+                        $body .= "If you did not request a password reset, you can safely ignore this email.\r\n\r\n";
+                        $body .= "-- Accounts Bazar Team\r\nhttps://accountsbazar.com/";
+
+                        $htmlBody = getEmailTemplate(
+                            'Password Reset OTP',
+                            '<p>Hello,</p><p>We received a password reset request for your account.</p><p><strong>Your OTP: ' . htmlspecialchars($otp, ENT_QUOTES, 'UTF-8') . '</strong></p><p>This OTP is valid for 15 minutes. Do not share it with anyone.</p>'
+                        );
+
+                        // Try direct SMTP send first for immediate OTP delivery.
+                        $smtpSent = smtpSendMail($email, $subject, $htmlBody);
+
+                        // Always queue as backup for cron-based retry
+                        $mailQueued = enqueueEmail($conn, $email, $subject, $htmlBody);
+
+                        // Process a few queued jobs immediately so OTP can arrive
+                        // even when cron is not yet configured.
+                        $queueResult = array('queued' => 0, 'sent' => 0);
+                        if ($mailQueued) {
+                            $queueResult = processEmailQueue($conn, 3);
+                        }
+
+                        // If SMTP failed, try PHP mail() as fallback
+                        $phpMailSent = false;
+                        if (!$smtpSent && !((int) ($queueResult['sent'] ?? 0) > 0)) {
+                            $headers = "From: Accounts Bazar <" . MAIL_FROM_ADDRESS . ">\r\n";
+                            $headers .= "MIME-Version: 1.0\r\n";
+                            $headers .= "Content-Type: text/html; charset=UTF-8\r\n";
+                            $phpMailSent = @mail($email, $subject, $htmlBody, $headers);
+                            if ($phpMailSent) {
+                                logMailActivity($email, $subject, 'SUCCESS', 'Sent via PHP mail() fallback');
+                            }
+                        }
+
+                        if ($smtpSent && $mailQueued) {
+                            // Mark as sent in the queue so cron does not resend
+                            $markSentStmt = $conn->prepare('UPDATE email_queue SET status = "sent", sent_at = NOW() WHERE to_email = ? AND status = "pending" ORDER BY id DESC LIMIT 1');
+                            if ($markSentStmt) {
+                                $markSentStmt->bind_param('s', $email);
+                                $markSentStmt->execute();
+                                $markSentStmt->close();
+                            }
+                        }
+                        $db->closeConnection();
+
+                        $sentNow = $smtpSent || ((int) ($queueResult['sent'] ?? 0) > 0) || $phpMailSent;
+
+                        if (!$mailQueued) {
+                            $error = 'Could not queue OTP email. Please try again or contact support.';
+                        } elseif (!$sentNow) {
+                            $error = 'OTP email could not be delivered right now. Please try again after 1-2 minutes.';
+                            $_SESSION['fp_step'] = 'email';
+                            $step = 'email';
+                        } else {
+                            $_SESSION['fp_step']   = 'otp';
+                            $_SESSION['fp_email']  = $email;
+                            $_SESSION['fp_otp_ok'] = false;
+                            $step    = 'otp';
+                            $success = 'OTP sent to ' . htmlspecialchars(maskEmailAddress($email), ENT_QUOTES, 'UTF-8') . '. Check your inbox (and spam folder).';
+                        }
                     }
                 }
             }
@@ -554,7 +607,7 @@ require_once 'products/includes/seo.php';
                     <div class="fp-icon fp-icon-email">🔑</div>
                 </div>
                 <h1 class="fp-title">Forgot Password?</h1>
-                <p class="fp-subtitle">Enter the email linked to your account and we'll send you a 6-digit OTP to reset your password.</p>
+                <p class="fp-subtitle">Enter your account email or phone number and we'll send a 6-digit OTP to your registered email.</p>
             <?php elseif ($step === 'otp'): ?>
                 <div class="fp-header">
                     <div class="fp-icon fp-icon-otp">📨</div>
@@ -591,14 +644,14 @@ require_once 'products/includes/seo.php';
                 <form class="fp-form" method="POST" action="forgot-password.php">
                     <input type="hidden" name="fp_action" value="send_otp">
                     <div class="fp-row">
-                        <label for="fp-email">Email Address</label>
+                        <label for="fp-email">Email Address or Phone Number</label>
                         <input
                             id="fp-email"
-                            type="email"
+                            type="text"
                             name="fp_email"
                             required
-                            autocomplete="email"
-                            placeholder="your@email.com"
+                            autocomplete="username"
+                            placeholder="your@email.com or 01XXXXXXXXX"
                             value="<?php echo htmlspecialchars((string)($_POST['fp_email'] ?? '')); ?>"
                         >
                     </div>
