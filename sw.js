@@ -2,6 +2,7 @@ const CACHE_NAME = 'ab-pwa-v2';
 const OFFLINE_ASSETS = [
   './',
   'index.php',
+  'admin/OFLINE.PHP',
   'shop.php',
   'css/style.css',
   'css/mobile.css',
@@ -44,7 +45,15 @@ self.addEventListener('fetch', function(event) {
       return response;
     }).catch(function() {
       return caches.match(event.request).then(function(cached) {
-        return cached || caches.match('index.php');
+        if (cached) {
+          return cached;
+        }
+
+        if (event.request.mode === 'navigate') {
+          return caches.match('admin/OFLINE.PHP');
+        }
+
+        return caches.match('index.php');
       });
     })
   );
